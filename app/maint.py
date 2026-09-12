@@ -1,4 +1,6 @@
-"""定时维护：问答会话的压缩与清理 + 知识库目录（INDEX.md）刷新（由 timer 每小时触发）。
+"""定时维护：问答会话压缩/清理 + 问答记录与附件的按保留期删除 + 知识库目录刷新。
+
+由 `<slug>-maint.timer` 每小时触发（不是每次改动都跑）。
 
 上下文策略由后端决定（见 chat.py），这里只负责按时执行。
 知识库目录是「wiki 的入口页」：列出所有文档与标签，内容变了才写库（避免无意义改动）。
@@ -15,6 +17,7 @@ import chat as chatm     # noqa: E402
 import db as dbm         # noqa: E402
 import kb as kbm         # noqa: E402
 import llm as llmm       # noqa: E402
+import prune as prunem   # noqa: E402
 import update as updm    # noqa: E402
 
 INDEX_REL = f"{kbm.KNOWLEDGE_DIR}/INDEX.md"
@@ -43,6 +46,8 @@ if __name__ == "__main__":
             st = chatm.cleanup(conn, llm=llmm)
             print(f"[maint] 压缩会话 {st['compressed_sessions']}"
                   f"（{st['compressed_msgs']} 条消息）　清理 {st['purged']} 条 ")
+            # 问答记录与随问答上传的附件按保留期删除（见 prune.py 的边界说明）
+            print(f"[maint] {prunem.describe(prunem.run(conn))}")
             print(f"[maint] {refresh_index(conn)}")
             msg = updm.auto_tick()
             if msg:

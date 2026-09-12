@@ -191,7 +191,10 @@ def settings(conn) -> dict:
         "repo": dbm.get_setting(conn, "kb_repo", ""),
         "branch": dbm.get_setting(conn, "kb_branch", "main") or "main",
         "enabled": dbm.get_setting(conn, "kb_sync_enabled", "1") == "1",
-        "snapshot": dbm.get_setting(conn, "kb_snapshot_db", "1") == "1",
+        # 默认关闭：快照写在数据仓的 data/ 下，而数据仓 .gitignore 排除 data/，
+        # 所以它推不出去、只是同盘多一份副本（占地方又没有异地价值）。
+        # 私人记录的异地留档由「导出 markdown + 提交推送」负责，不需要它。
+        "snapshot": dbm.get_setting(conn, "kb_snapshot_db", "0") == "1",
         "last": dbm.get_setting(conn, "kb_last_sync", ""),
         "last_test": dbm.get_setting(conn, "kb_last_test", ""),
         "mode": cred_mode(conn),

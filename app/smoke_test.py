@@ -1769,6 +1769,53 @@ def main() -> int:
           'class="tabbar"' in _dash3 and 'id="accentPick"' in _dash3 and 'id="themeBtn"' in _dash3)
 
 
+    # ---- 问答记录与附件清理 ----
+    _adm = call(op, "/admin")[1]
+    check("管理页有清理卡片，并写明「只有私人记录需要留档」",
+          "问答记录与附件清理" in _adm and "只有私人记录需要长期留" in _adm, _adm[:120])
+    check("卡片里写明清理由 maint.timer 触发（没有新增定时器）",
+          "maint.timer" in _adm and "每小时检查一次" in _adm)
+    check("管理页备份卡片改为「不做定期备份」",
+          "不做定期备份" in _adm and "本地不留整库副本" in _adm)
+
+    st, body = call(op, "/admin/prune/settings",
+                    {"csrf": tok2, "enabled": "1", "qa_keep_days": "7",
+                     "uploads_keep_days": "9"}, follow=True)
+    check("清理设置可保存", "清理设置已保存" in body, body[:150])
+    st, body = call(op, "/admin/prune/now", {"csrf": tok2}, follow=True)
+    check("可以立即清理一次并回报结果", "清理完成" in body, body[:180])
+    st, body = call(op, "/admin/prune/settings",
+                    {"csrf": tok2, "enabled": "1", "qa_keep_days": "99999",
+                     "uploads_keep_days": "0"}, follow=True)
+    st, body = call(op, "/admin")
+    check("保留期被夹在合法范围内（3650 / 1）",
+          'value="3650"' in body and 'value="1"' in body, body[:150])
+    st, _ = call(op, "/admin/prune/now", {"csrf": "错的"}, follow=False)
+    check("立即清理要校验 csrf", st == 403, f"status={st}")
+
+    # 红线：挂到真实记录上的附件不能被清理掉
+    _up = pathlib.Path(DB).parent / "uploads"
+    _up.mkdir(parents=True, exist_ok=True)
+    (_up / "smoke_record.jpg").write_bytes(b"x" * 50)
+    with dbm.db() as _pc:
+        _pid = _pc.execute("SELECT id FROM profiles ORDER BY id LIMIT 1").fetchone()["id"]
+        _pc.execute("INSERT INTO cycles(profile_id, start_date, end_date, flow, symptoms, note,"
+                    " created_at, updated_at) VALUES(?,?,?,?,?,?,?,?)",
+                    (_pid, "2026-02-01", "2026-02-03", "medium", "", "", dbm.now(), dbm.now()))
+        _pid_cycle = _pc.execute("SELECT id FROM cycles ORDER BY id DESC LIMIT 1").fetchone()["id"]
+        import prune as _pm
+        _pc.execute("INSERT INTO attachments(ref_kind, ref_id, filename, mime, size,"
+                    " stored_name, uploaded_by, created_at) VALUES('cycle',?,?,?,?,?,?,?)",
+                    (_pid_cycle, "smoke_record.jpg", "image/jpeg", 50, "smoke_record.jpg", 1,
+                     "2020-01-01 00:00:00"))
+        _pc.commit()
+        _stat = _pm.run(_pc, force=True)
+        _rows = _pc.execute("SELECT COUNT(*) FROM attachments WHERE ref_kind='cycle'"
+                            " AND stored_name='smoke_record.jpg'").fetchone()[0]
+    check("【红线】清理不会删挂到真实记录上的附件（行还在）", _rows == 1, _stat)
+    check("【红线】它的文件也还在", (_up / "smoke_record.jpg").exists())
+    check("清理统计里报告了受保护的记录附件数", _stat["kept_record_files"] >= 1, _stat)
+
     _admin = call(op, "/admin")[1]
     check("管理页写明备份范围（记录备份 / 知识库不备份）",
           "备份范围（确认一下）" in _admin and "不备份" in _admin and "不占 GitHub" in _admin)
@@ -1820,6 +1867,16 @@ def main() -> int:
     check("同步相关的单元模板已从仓库全部删除（定时器 + oneshot 服务）",
           not pathlib.Path("../deploy/systemd-user/APP_SLUG-sync.timer").exists()
           and not pathlib.Path("../deploy/systemd-user/APP_SLUG-sync.service").exists())
+    check("不再有定期备份单元（只保留会话维护那一个定时器）",
+          not pathlib.Path("../deploy/systemd-user/APP_SLUG-backup.timer").exists()
+          and not pathlib.Path("../deploy/systemd-user/APP_SLUG-backup.service").exists()
+          and pathlib.Path("../deploy/systemd-user/APP_SLUG-maint.timer").exists())
+    check("安装脚本不再启用定期备份，并会清理老版本装过的",
+          'enable --now "$APP_SLUG-backup.timer"' not in _instsrc
+          and 'disable --now "$u"' in _instsrc
+          and '"$APP_SLUG-backup.timer" "$APP_SLUG-backup.service"' in _instsrc)
+    check("SQLite 快照默认关闭（它写在被 gitignore 的 data/ 下，推不出去）",
+          'kb_snapshot_db", "0"' in open("sync_job.py", encoding="utf-8").read())
     _instsrc = open("../deploy/install.sh", encoding="utf-8").read()
     check("安装脚本不再启用同步单元，但会清理老版本装过的（定时器 + 服务）",
           'enable --now "$APP_SLUG-sync.timer"' not in _instsrc

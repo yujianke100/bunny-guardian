@@ -42,6 +42,7 @@ import llm as llmm
 import media
 import mdrender
 import outbound
+import prune as prunem
 import phases as phasesm
 import update as updm
 import extensions as extm
@@ -2363,7 +2364,7 @@ def admin_page(request: Request, user=Depends(authm.require_login), msg: str = "
                   upd=updm.auto_settings(), pi=updm.pi_state(),
                   sync=_sync_settings(conn), bk=backupm.settings(conn), chat=chatm.settings(),
                   sync_trigger=dbm.get_setting(conn, "kb_last_trigger", ""),
-                  backups=backupm.list_backups())
+                  backups=backupm.list_backups(), pr=_prune_ctx(conn))
 
 
 @app.post("/admin/users")
@@ -2954,6 +2955,59 @@ async def agent_audit(request: Request, user=Depends(require_agent)):
     return {"ok": True}
 
 
+# ------------------------------------------------------------------ 问答记录与附件清理
+
+def _prune_ctx(conn) -> dict:
+    """给管理页的清理卡片：设置 + 当前占用（数据库、上传目录）。"""
+    cfg = prunem.settings(conn)
+    try:
+        db_size = Path(dbm.DB_PATH).stat().st_size
+    except OSError:
+        db_size = 0
+    up = Path(dbm.DB_PATH).parent / "uploads"
+    files = [f for f in up.iterdir() if f.is_file()] if up.is_dir() else []
+    up_size = sum(f.stat().st_size for f in files)
+    n_qa = conn.execute("SELECT COUNT(*) FROM qa_messages").fetchone()[0]
+    n_att = conn.execute("SELECT COUNT(*) FROM attachments WHERE ref_kind='qa'").fetchone()[0]
+    cfg["usage"] = (f"数据库 {db_size / 1024 / 1024:.1f}MB（问答 {n_qa} 条）；"
+                    f"上传 {len(files)} 个文件 {up_size / 1024:.0f}KB"
+                    f"（其中问答附件 {n_att} 个）")
+    return cfg
+
+
+@app.post("/admin/prune/settings")
+def admin_prune_settings(request: Request, user=Depends(authm.require_login),
+                         csrf: str = Form(""), enabled: str = Form(""),
+                         qa_keep_days: str = Form("30"), uploads_keep_days: str = Form("30")):
+    """保存清理设置（保留期）。"""
+    user.require_admin()
+    csrf_ok(request, user, csrf)
+
+    def num(v: str, default: int) -> int:
+        try:
+            return max(1, min(3650, int(v)))
+        except (TypeError, ValueError):
+            return default
+
+    prunem.set_settings(user.conn, enabled == "1",
+                        num(qa_keep_days, 30), num(uploads_keep_days, 30))
+    user.audit("prune_settings",
+               f"enabled={enabled == '1'} qa={qa_keep_days} uploads={uploads_keep_days}",
+               client_ip(request))
+    return RedirectResponse(url="/admin?msg=清理设置已保存", status_code=303)
+
+
+@app.post("/admin/prune/now")
+def admin_prune_now(request: Request, user=Depends(authm.require_login), csrf: str = Form("")):
+    """立即按保留期清理一次（force：即使开关关着也照做，是显式点击）。"""
+    user.require_admin()
+    csrf_ok(request, user, csrf)
+    stat = prunem.run(user.conn, force=True)
+    user.audit("prune_now", prunem.describe(stat), client_ip(request))
+    return RedirectResponse(url=f"/admin?msg={urllib.parse.quote('清理完成：' + prunem.describe(stat))}",
+                            status_code=303)
+
+
 # ------------------------------------------------------------------ 智能体管理台（需管理员登录）
 
 @app.get("/admin/agent", response_class=HTMLResponse)
@@ -2965,7 +3019,6 @@ def admin_agent(request: Request, user=Depends(authm.require_login), msg: str = 
     return render(request, user, "admin_agent.html", active="admin", title="智能体权限",
                   st=agentm.stats(conn), tokens=agentm.active_token_info(conn),
                   pending=pending, recent=recent, audit=agentm.audit_view(conn, 60),
-                  quotas=agentm.quota_view(conn), allowlist=agentm.FETCH_ALLOWLIST,
                   kinds=agentm.PROPOSAL_KINDS, scopes=agentm.SCOPES,
                   scope_cn=agentm.SCOPE_CN, ops=agent_opsm.OPS,
                   ops_denied=agent_opsm.NOT_SUPPORTED, msg=msg, err=err)

@@ -145,8 +145,20 @@ if [ "$_sync_removed" -eq 1 ]; then
   $SCTL daemon-reload
   echo "    已移除旧的同步单元（同步现在只在有改动时触发）"
 fi
-$SCTL enable --now "$APP_SLUG-backup.timer" >/dev/null 2>&1 || \
-  echo "    （定时备份单元未启用，稍后手动：$SCTL enable --now $APP_SLUG-backup.timer）"
+# 不做定期备份：私人记录由「改动触发的导出 + 推送」留档（异地 + 版本化），
+# 本地不再留整库副本。老机器上装过的备份定时器在这里清掉。
+_bak_removed=0
+for u in "$APP_SLUG-backup.timer" "$APP_SLUG-backup.service"; do
+  $SCTL disable --now "$u" >/dev/null 2>&1 || true
+  if [ -e "$UNITS_DIR/$u" ]; then
+    rm -f "$UNITS_DIR/$u"
+    _bak_removed=1
+  fi
+done
+if [ "$_bak_removed" -eq 1 ]; then
+  $SCTL daemon-reload
+  echo "    已移除定期备份单元（改为只在有改动时同步）"
+fi
 $SCTL enable --now "$APP_SLUG-maint.timer" >/dev/null 2>&1 || \
   echo "    （会话维护单元未启用，稍后手动：$SCTL enable --now $APP_SLUG-maint.timer）"
 $SCTL enable "$APP_SLUG.service" >/dev/null 2>&1 || true

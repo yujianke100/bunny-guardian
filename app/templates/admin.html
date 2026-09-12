@@ -200,7 +200,11 @@
       允许同步（关闭＝数据只维护在本地）</label></div>
     <div class="span2"><label style="display:inline-flex;align-items:center;gap:6px;font-size:.88rem">
       <input type="checkbox" name="snapshot" value="1" style="width:auto" {{ "checked" if sync.snapshot else "" }}>
-      同时提交 SQLite 快照（完整可恢复，但会增大仓库体积）</label></div>
+      同时写一份 SQLite 快照到数据仓的 <code>data/</code>（默认关）</label>
+      <div class="muted" style="font-size:.78rem">
+        注意：数据仓的 <code>.gitignore</code> 排除 <code>data/</code>，所以这份快照
+        <b>推不出去</b>，只是本机多一份副本。真要去异地的是导出的 markdown。
+      </div></div>
     <div class="span2"><button class="btn" type="submit">保存同步设置</button></div>
   </form>
   <div class="note" style="margin:8px 0 4px">
@@ -305,13 +309,58 @@
 </div>
 
 <div class="card">
-  <h2>数据备份与恢复</h2>
+  <h2>问答记录与附件清理</h2>
+  <div class="note">
+    <b>只有私人记录需要长期留</b>（经期、每日日志、疾病档案、病程事件、就诊记录），
+    它们由改动触发的同步导出成 markdown 推到私人仓库。
+    <b>AI 问答历史与随问答上传的照片/文件不需要留档</b>，按下面的保留期自动删除，
+    省地方也少一份泄露面。
+    <br>红线：<b>只删「随问答上传」的附件</b>。图片一旦被挂到真实记录上
+    （比如成为某次就诊的病历单），就不再受这里影响。
+  </div>
   <dl class="kv">
-    <dt>自动备份</dt>
-    <dd>{% if bk.enabled %}<span class="tag ok">已开启</span>（{{ "每天" if bk.interval == "daily" else "每周" }}一次，保留最近 {{ bk.keep }} 份{% if bk.with_uploads %}，含照片{% endif %}）
-        {% else %}<span class="tag grey">已关闭</span>{% endif %}
-      <div class="muted" style="font-size:.78rem">由 <code>{{ user.app_slug if user.app_slug else "bunny-guardian" }}-backup.timer</code> 每小时触发，到期才真备</div>
-    </dd>
+    <dt>清理</dt>
+    <dd>{% if pr.enabled %}<span class="tag ok">已开启</span>{% else %}<span class="tag grey">已关闭</span>{% endif %}
+      <span class="muted">（由 <code>{{ user.app_slug if user.app_slug else "bunny-guardian" }}-maint.timer</code> 每小时检查一次）</span></dd>
+    <dt>问答记录保留</dt><dd>{{ pr.qa_keep_days }} 天</dd>
+    <dt>问答附件保留</dt><dd>{{ pr.uploads_keep_days }} 天</dd>
+    <dt>上次清理</dt><dd>{{ pr.last or "—" }}</dd>
+    <dt>当前占用</dt><dd class="muted">{{ pr.usage }}</dd>
+  </dl>
+  <details class="fold">
+    <summary>⚙ 清理设置</summary>
+    <form method="post" action="/admin/prune/settings" class="rowform c2">
+      <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+      <div><label style="display:inline-flex;align-items:center;gap:6px;font-size:.88rem">
+        <input type="checkbox" name="enabled" value="1" style="width:auto" {{ "checked" if pr.enabled else "" }}>
+        开启自动清理</label></div>
+      <div><label for="pk">问答记录保留天数</label>
+        <input id="pk" type="number" name="qa_keep_days" min="1" max="3650" value="{{ pr.qa_keep_days }}"></div>
+      <div><label for="pu">问答附件保留天数</label>
+        <input id="pu" type="number" name="uploads_keep_days" min="1" max="3650" value="{{ pr.uploads_keep_days }}"></div>
+      <div><button class="btn small" type="submit">保存清理设置</button></div>
+    </form>
+    <form method="post" action="/admin/prune/now" data-confirm="立即按上面的保留期清理？删除不可恢复。">
+      <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+      <button class="btn danger small" type="submit">立即清理一次</button>
+    </form>
+  </details>
+</div>
+
+<div class="card">
+  <h2>数据备份与恢复</h2>
+  <div class="note">
+    <b>不做定期备份。</b>需要长期留档的只有<b>私人记录</b>（经期、每日日志、疾病档案、
+    病程事件、就诊记录）——那部分由<b>改动触发的同步</b>导出成 markdown 推到私人仓库
+    （异地 + 版本化，就是备份本身），本地不留整库副本。
+    <br>这里的手动备份只在你想临时导一份出来时用。
+  </div>
+  <dl class="kv">
+    <dt>定时备份</dt>
+    <dd>{% if bk.enabled %}<span class="tag warn">已开启</span>
+        <span class="muted">（{{ "每天" if bk.interval == "daily" else "每周" }}一次，保留最近 {{ bk.keep }} 份{% if bk.with_uploads %}，含照片{% endif %}）
+        ——注意：单元文件已从仓库移除，本次改动后不会再自动触发</span>
+        {% else %}<span class="tag ok">未启用（推荐）</span>{% endif %}</dd>
     <dt>备份目录</dt><dd><code>{{ bk.dir }}</code>（在项目 <code>data/</code> 下，已 gitignore）</dd>
     <dt>上次备份</dt><dd>{{ bk.last or "—" }}</dd>
     <dt>上次恢复</dt><dd>{{ bk.last_restore or "—" }}</dd>
