@@ -2745,11 +2745,36 @@ class AgentCtx:
     def can_write(self) -> bool:
         return self.scope == "write"
 
+    def log_durable(self, tool: str, decision: str, detail: str = "",
+                    preview: str = "") -> None:
+        """写一条**不会被回滚**的审计。
+
+        require_agent 在本请求抛错（403/400）时会 rollback，所以被拒的记录必须当场提交，
+        否则越权尝试不留痕。
+
+        两个坑（都踩过）：
+          1) 用 self.conn 写完之后**必须显式 commit**，否则还是会被之后那一次 rollback 抹掉；
+          2) 不能改开另一个连接来写——本连接此时持有未提交的写事务（check_token 会
+             `UPDATE agent_tokens ... uses+1`），SQLite 会把第二个连接挡在锁外，
+             而「写审计失败就静默放过」正好让这条记录凭空消失。
+        所以：先本连接提交；真失败了再退到独立连接，并把失败打到日志里，不再静默。
+        """
+        try:
+            agentm.audit(self.conn, self.label, tool, decision, detail, preview)
+            self.conn.commit()
+            return
+        except Exception as e:                       # noqa: BLE001
+            print(f"[audit] 拒绝记录写入失败（本连接）：{e}", flush=True)
+        try:
+            with dbm.db() as c:
+                agentm.audit(c, self.label, tool, decision, detail, preview)
+        except Exception as e:                       # noqa: BLE001
+            print(f"[audit] 拒绝记录写入失败：{e}", flush=True)
+
     def need_write(self, tool: str) -> None:
         """写操作的门：必须是 write 作用域令牌。"""
         if not self.can_write:
-            agentm.audit(self.conn, self.label, tool, "denied",
-                         "令牌作用域为 read，不允许直接写")
+            self.log_durable(tool, "denied", "令牌作用域为 read，不允许直接写")
             raise HTTPException(
                 status_code=403,
                 detail="当前令牌是只读作用域（read），不能直接改数据。"
@@ -2883,7 +2908,8 @@ async def agent_op(request: Request, user=Depends(require_agent)):
     try:
         out = agent_opsm.run(user.conn, pid, op, args, dry_run=dry_run)
     except agent_opsm.OpError as e:
-        user.log("op", "denied", f"{op}: {e}", json.dumps(args, ensure_ascii=False)[:200])
+        # 同 need_write：这次请求会被回滚，所以审计要单独提交
+        user.log_durable(op, "denied", str(e), json.dumps(args, ensure_ascii=False)[:200])
         raise HTTPException(status_code=400, detail=str(e))
     if dry_run:
         # 校验与执行都跑过了，把事务丢掉——dry_run 不该改变任何东西

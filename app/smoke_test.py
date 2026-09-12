@@ -1160,8 +1160,11 @@ def main() -> int:
                              " WHERE decision='denied' AND token_label='smoke-test'"
                              " ORDER BY id DESC LIMIT 10").fetchall()
     check("直接写操作写进了审计表", len(ok_rows) >= 3, [dict(r) for r in ok_rows][:3])
-    check("越权尝试也留了痕（read 令牌写被拒时记 denied）",
+    check("越权尝试留痕且不被回滚（403 后仍能查到 denied 记录）",
           any(r["decision"] == "denied" for r in denied), [dict(r) for r in denied][:3])
+    check("被拒的审计记在具体操作名下（便于定位在试什么）",
+          any(r["tool"] in ("cycle.add",) for r in denied),
+          [dict(r) for r in denied][:3])
 
     st, body = call(op, "/api/agent/context", headers=H)
     check("读取档案概览（含月经推断）", st == 200 and "月经" in body and "推断" in body, f"status={st}")
