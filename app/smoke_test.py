@@ -1721,12 +1721,14 @@ def main() -> int:
     st, body = call(op, "/admin")
     check("管理页写明触发方式（只有改动才同步，没有定时器）",
           "有改动就触发" in body and "没有定时任务" in body and "定时器只剩兜底" not in body)
-    check("同步定时器单元已从仓库删除",
-          not pathlib.Path("../deploy/systemd-user/APP_SLUG-sync.timer").exists())
+    check("同步相关的单元模板已从仓库全部删除（定时器 + oneshot 服务）",
+          not pathlib.Path("../deploy/systemd-user/APP_SLUG-sync.timer").exists()
+          and not pathlib.Path("../deploy/systemd-user/APP_SLUG-sync.service").exists())
     _instsrc = open("../deploy/install.sh", encoding="utf-8").read()
-    check("安装脚本不再启用同步定时器（只清理老版本装过的）",
+    check("安装脚本不再启用同步单元，但会清理老版本装过的（定时器 + 服务）",
           'enable --now "$APP_SLUG-sync.timer"' not in _instsrc
-          and 'disable --now "$APP_SLUG-sync.timer"' in _instsrc)
+          and 'disable --now "$u"' in _instsrc
+          and '"$APP_SLUG-sync.timer" "$APP_SLUG-sync.service"' in _instsrc)
     _cfgsrc = open("../deploy/config.sh", encoding="utf-8").read()
     check("部署配置里不再有同步周期项 SYNC_INTERVAL", "SYNC_INTERVAL" not in _cfgsrc)
     check("没有定时器后的补网：启动补同步接在启动钩子上（只在有待推送标记时才跑）",

@@ -130,13 +130,20 @@ else
   SCTL="systemctl --user"
 fi
 $SCTL daemon-reload
-# 同步不再有定时器（只在有改动时推送）。定时器单元已从仓库删除，
-# 这里负责把**老版本装过的**定时器停掉并删掉，避免升级后还在定期跑。
-$SCTL disable --now "$APP_SLUG-sync.timer" >/dev/null 2>&1 || true
-if [ -e "$UNITS_DIR/$APP_SLUG-sync.timer" ]; then
-  rm -f "$UNITS_DIR/$APP_SLUG-sync.timer"
+# 同步不再有任何单元（只在有改动时推送）：定时器与 oneshot 的 sync.service
+# 都已从仓库删除。这里负责把**老版本装过的**一并停掉删掉，否则升级后会留下
+# 一个没人激活、也说不清干嘛的静态单元。
+_sync_removed=0
+for u in "$APP_SLUG-sync.timer" "$APP_SLUG-sync.service"; do
+  $SCTL disable --now "$u" >/dev/null 2>&1 || true
+  if [ -e "$UNITS_DIR/$u" ]; then
+    rm -f "$UNITS_DIR/$u"
+    _sync_removed=1
+  fi
+done
+if [ "$_sync_removed" -eq 1 ]; then
   $SCTL daemon-reload
-  echo "    已移除旧的定时同步单元（同步现在只在有改动时触发）"
+  echo "    已移除旧的同步单元（同步现在只在有改动时触发）"
 fi
 $SCTL enable --now "$APP_SLUG-backup.timer" >/dev/null 2>&1 || \
   echo "    （定时备份单元未启用，稍后手动：$SCTL enable --now $APP_SLUG-backup.timer）"
