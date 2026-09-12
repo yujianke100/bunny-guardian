@@ -17,7 +17,13 @@ APP_SLUG=${APP_SLUG:-bunny-guardian}              # 用于 unit 名、配置目�
 APP_NAME=${APP_NAME:-"Bunny Guardian"}       # 页面标题与 unit Description
 
 # ---- 路径：默认全部在 $HOME 下 ----
-HOME_DIR=${HOME_DIR:-$HOME}
+# 注意：**系统级 systemd 单元不带 HOME 环境变量**，$HOME 可能根本不存在。
+# 这里自己推一个兜底（config.local.sh 通常已覆盖 INSTALL_ROOT 等，本行只是兜底默认值），
+# 否则 `set -u` 读 $HOME 时会直接 `parameter not set` 退出——
+# 实测后果：backup.service / maint.service 两个定时任务以 status=2 连续失败，
+# 表现为「定时备份明明配了却一份都没生成」。
+_USER_HOME=$(getent passwd "$(id -un 2>/dev/null)" 2>/dev/null | cut -d: -f6) || true
+HOME_DIR=${HOME_DIR:-${HOME:-$_USER_HOME}}
 INSTALL_ROOT=${INSTALL_ROOT:-$HOME_DIR/$APP_SLUG}           # 代码（git 工作副本）
 # 数据默认落在**项目文件夹内**（data/ 已在 .gitignore 中），备份=整个文件夹一起拷
 DATA_DIR=${DATA_DIR:-$INSTALL_ROOT/data}                    # SQLite、上传附件、API Key
