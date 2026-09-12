@@ -1,0 +1,20 @@
+<div class="card" id="blk-infer">
+    <h2>🔎 周期推断</h2>
+    {% if info.example %}
+      <div class="empty">暂无记录</div>
+    {% else %}
+      <dl class="kv">
+        <dt>当前阶段</dt><dd>{{ info.phase_cn }}{% if info.cycle_day %}（第 {{ info.cycle_day }} 天）{% endif %}</dd>
+        <dt>中位周期</dt><dd>{{ info.cycle_len }} 天（记录 {{ info.stats.n_lengths }} 个间隔）</dd>
+        <dt>波动范围</dt><dd>{{ info.stats.min }} ~ {{ info.stats.max }} 天{% if info.stats.stdev %}，标准差 {{ info.stats.stdev }}{% endif %}</dd>
+        <dt>推断下次经期</dt><dd>{{ info.next_start }}（{{ info.next_window[0] }} ~ {{ info.next_window[1] }}）</dd>
+        <dt>估算排卵日</dt><dd>{{ info.ovulation_date }}</dd>
+        <dt>易孕窗口</dt><dd>{{ info.fertile_window[0] }} ~ {{ info.fertile_window[1] }}</dd>
+        <dt>置信度</dt><dd>{{ info.confidence }}</dd>
+      </dl>
+      <div class="note">{{ info.confidence_reason }}。{{ info.disclaimer }}</div>
+      {% if info.irregular_flags %}
+        <div class="flash warn">{% for f in info.irregular_flags %}<div>· {{ f }}</div>{% endfor %}</div>
+      {% endif %}
+    {% endif %}
+  </div>

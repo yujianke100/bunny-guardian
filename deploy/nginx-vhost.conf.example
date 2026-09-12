@@ -1,0 +1,43 @@
+# 可选：外部反向代理示例（本项目不负责也不依赖它）
+#
+# 你的代理只需要做一件事：把公开的 HTTPS 域名反代到 http://127.0.0.1:9810
+# 如果你的机器上跑着多个站点，可以参考下面的「按 SNI 分流」两段式写法。
+#
+# 本文件里的 @@ 占位符由 deploy/install.sh 之外的部署流程替换；也可直接手改。
+
+# ---------- 情形 A：这台机器独占 443（最简单）----------
+server {
+    listen 443 ssl;
+    server_name @@DOMAIN@@;
+
+    ssl_certificate     /etc/letsencrypt/live/@@DOMAIN@@/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/@@DOMAIN@@/privkey.pem;
+
+    add_header Cache-Control "no-store" always;
+    add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "same-origin" always;
+    client_max_body_size 14m;
+
+    location / {
+        proxy_pass http://127.0.0.1:@@APP_PORT@@;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_read_timeout 600s;
+        proxy_buffering off;      # 问答是 SSE 流式返回
+    }
+}
+
+# ---------- 情形 B：443 已被按 SNI 分流的 nginx 占用 ----------
+# 1) 在 nginx.conf 的 stream 块里加一条映射与 upstream：
+#      map $ssl_preread_server_name $backend_name {
+#          ...
+#          @@DOMAIN@@   @@APP_SLUG@@;       # 这个名字可自定
+#      }
+#      upstream @@APP_SLUG@@ { server 127.0.0.1:@@VHOST_PORT@@; }
+#
+# 2) 再把上面情形 A 的 server 块改成监听内部端口（其余保持）：
+#      listen 127.0.0.1:@@VHOST_PORT@@ ssl;

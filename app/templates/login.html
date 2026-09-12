@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block anon %}
+<div class="card">
+  <h1 style="text-align:center;margin-bottom:.2em">🌸 {{ app_name }}</h1>
+  <p class="muted" style="text-align:center;font-size:.88rem">经期、疾病与就医记录的私人归档</p>
+  {% if error %}<div class="flash err">{{ error }}</div>{% endif %}
+  <form method="post" action="/login">
+    <input type="hidden" name="next" value="{{ next }}">
+    <label for="u">账号</label>
+    <input id="u" type="text" name="username" autocomplete="username" autocapitalize="off"
+           autocorrect="off" required autofocus>
+    <label for="p">密码</label>
+    <input id="p" type="password" name="password" autocomplete="current-password" required>
+    <button class="btn" type="submit" style="width:100%">登录</button>
+  </form>
+  <p class="muted" style="font-size:.8rem;margin-top:14px">
+    本系统只存放个人健康数据，请勿在公共设备上保持登录状态。会话有效期 30 天。
+  </p>
+</div>
+{% endblock %}

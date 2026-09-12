@@ -1,0 +1,12 @@
+# 外发内容抹除清单（站点专属敏感词，一行一个，# 后面是注释）
+#
+# 部署时会被复制到数据目录（<$DATA_DIR>/scrub_terms.txt，不进 git），
+# 由 app/outbound.py 读取，用于把「本环境专属」的词从外发内容里抹掉。
+#
+# 请按自己的环境填写：项目名、集群名、域名、主机名、内部工具名、同事/设备标识等。
+#
+# 示例（换成你自己的）：
+# my-health-kb
+# health.example.com
+# my-cluster
+# internal-tools

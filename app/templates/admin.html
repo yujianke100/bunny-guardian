@@ -1,0 +1,435 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>系统管理</h1>
+
+{% if request.query_params.get("msg") %}<div class="flash ok">{{ request.query_params.get("msg") }}</div>{% endif %}
+{% if request.query_params.get("err") %}<div class="flash err">{{ request.query_params.get("err") }}</div>{% endif %}
+{% if request.query_params.get("new_password") %}
+<div class="flash warn">
+  新密码（仅本次显示，请立即转交并让对方登录后自行修改）：
+  <code style="font-size:1rem">{{ request.query_params.get("new_password") }}</code>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>模型服务</h2>
+  <dl class="kv">
+    <dt>端点</dt><dd>{{ llm.base_url }}</dd>
+    <dt>模型</dt><dd>{{ llm.model }}</dd>
+    <dt>密钥</dt><dd>{% if llm.key_set %}<span class="tag ok">已配置</span> {{ llm.key_hint }}{% else %}<span class="tag grey">未配置</span>{% endif %}</dd>
+    <dt>连通性</dt><dd>{% if llm_check %}{{ llm_check }}{% else %}<span class="tag grey">尚未测试</span>{% endif %}</dd>
+    <dt>推理位置</dt><dd>可在网页里配置（内网端点或公网 API），<b>公网端点会外发档案摘要</b></dd>
+  </dl>
+  <div class="actions">
+    <a class="btn ghost small" href="/admin/llm">模型接入配置 →</a>
+    <a class="btn ghost small" href="/admin/persona">AI 角色 →</a>
+    <a class="btn ghost small" href="/admin/search">联网检索（云浏览器） →</a>
+    <a class="btn ghost small" href="/admin/agent">智能体权限与提案 →</a>
+  </div>
+</div>
+
+<div class="card">
+  <h2>软件更新</h2>
+  <dl class="kv">
+    <dt>当前版本</dt><dd><code>{{ upd.local or "未知" }}</code> {{ upd.subject }}
+      {% if upd.branch %}（分支 {{ upd.branch }}）{% endif %}</dd>
+    <dt>自动检查</dt><dd>{% if upd.auto_check %}每 {{ upd.interval }} 小时{% else %}<span class="tag grey">关闭</span>{% endif %}</dd>
+    <dt>最近检查</dt><dd>{{ upd.last_check or "—" }}{% if upd.last_result %}<div class="muted" style="font-size:.78rem">{{ upd.last_result }}</div>{% endif %}</dd>
+    <dt>pi 智能体</dt>
+    <dd>{% if pi.installed %}<span class="tag ok">已安装</span> {{ pi.version }}{% else %}<span class="tag grey">未安装</span>{% endif %}
+      {% if pi.latest %}　npm 最新：{{ pi.latest }}{% endif %}
+      {% if pi.error %}<div class="muted" style="font-size:.78rem">{{ pi.error }}</div>{% endif %}</dd>
+  </dl>
+  <div class="actions">
+    <form method="post" action="/admin/update/check" class="inline">
+      <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+      <button class="btn small" type="submit">检查更新</button>
+    </form>
+    <form method="post" action="/admin/update/apply" class="inline"
+          data-confirm="拉取并应用更新？会重启服务（几秒不可用）。">
+      <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+      <button class="btn ghost small" type="submit">立即更新</button>
+    </form>
+    <form method="post" action="/admin/update/pi" class="inline"
+          data-confirm="安装/更新 pi 智能体？会装用户级 Node + pi，可能要一两分钟。">
+      <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+      <button class="btn ghost small" type="submit">安装/更新 pi 智能体</button>
+    </form>
+  </div>
+  <form method="post" action="/admin/update/auto" class="rowform c2">
+    <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+    <div class="span2">
+      <label style="display:inline-flex;gap:6px;align-items:center;font-size:.88rem">
+        <input type="checkbox" name="auto_check" value="1" style="width:auto" {{ 'checked' if upd.auto_check else '' }}>
+        自动检查更新
+      </label>
+      <label style="display:inline-flex;gap:6px;align-items:center;font-size:.88rem;margin-left:14px">
+        <input type="checkbox" name="auto_update" value="1" style="width:auto" {{ 'checked' if upd.auto_update else '' }}>
+        自动更新并重启
+      </label>
+    </div>
+    <div><label for="uhl">检查间隔（小时）</label>
+      <input id="uhl" type="number" name="interval" min="1" max="168" value="{{ upd.interval }}"></div>
+    <div><button class="btn small" type="submit">保存</button></div>
+  </form>
+  <div class="note">只从本项目自己的 <code>origin/{{ upd.branch }}</code> 拉取；自动更新默认关闭，
+    要开得在上面显式勾选（它会重启服务）。pi 智能体是可选项，没装就是「未安装」。</div>
+</div>
+
+<div class="card">
+  <h2>备份范围（确认一下）</h2>
+  <table style="width:100%;border-collapse:collapse;font-size:.9rem">
+    <tr><th align="left">内容</th><th align="left">仓库同步（GitHub）</th><th align="left">本地快照</th></tr>
+    <tr><td>经期记录 / 疾病档案 / 就医记录</td>
+        <td><span class="tag ok">备份</span>（每 {{ sync.interval_minutes or 10 }} 分钟一轮）</td>
+        <td><span class="tag ok">有</span></td></tr>
+    <tr><td>知识库（公开资料、AI 整理的资料笔记）</td>
+        <td><span class="tag grey">不备份</span>（用户要求：不占 GitHub）</td>
+        <td><span class="tag grey">不单独备份</span></td></tr>
+  </table>
+  <div class="note" style="margin-top:8px">
+    知识库里的东西都能再搜一次拿到，所以只放在这台服务器上；
+    记录类（她的经期、病历、就医）照旧进仓库，丢不了。
+  </div>
+</div>
+
+<div class="card">
+  <h2>知识库规模</h2>
+  <dl class="kv">
+    <dt>文档总数</dt><dd>{{ kb_stat.docs }} 篇（约 {{ (kb_stat.chars / 1000)|round(1) }} 千字）</dd>
+    <dt>AI 资料笔记</dt><dd>{{ kb_stat.notes }} 篇（约 {{ (kb_stat.note_chars / 1000)|round(1) }} 千字）</dd>
+    <dt>检索方式</dt><dd>内存倒排索引，写库时重建；按标题/标签加权、同篇去重</dd>
+  </dl>
+  {% if kb_stat.notes %}
+  <form method="post" action="/admin/kb/cleanup" class="rowform c2"
+        data-confirm="清理很久以前的 AI 资料笔记？公开资料丢了可以再搜，文档本身不删。">
+    <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+    <div><label for="cld">清理多少天前的资料笔记</label>
+      <input id="cld" type="number" name="days" value="180" min="30" max="3650"></div>
+    <div><button class="btn ghost" type="submit">清理</button></div>
+  </form>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>账号</h2>
+  <div class="note">
+    这套系统默认只由两个人使用：<b>她</b>（档案主人）与<b>他</b>（一起记录的人）。
+    <b>数据权限对所有账号一律完整且互通</b>——你们共同维护同一份档案；
+    只有<b>管理员</b>才有系统配置权限（账号、模型 API、备份与同步、审计、智能体权限），
+    普通账号不需要操心这些。
+  </div>
+  <div class="tablewrap">
+    <table>
+      <tr><th>用户名</th><th class="wrap">身份与权限</th><th>状态</th><th>上次登录</th><th class="wrap">操作</th></tr>
+      {% for u in users %}
+      <tr>
+        <td>{{ u.username }}<div class="muted" style="font-size:.8rem">{{ u.display_name }}</div></td>
+        <td class="wrap">
+          <form method="post" action="/admin/users/{{ u.id }}/profile" class="rowform">
+            <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+            <select name="who" style="width:auto;padding:4px 8px;font-size:.84rem">
+              <option value="" {{ "selected" if not u.who else "" }}>身份未指定</option>
+              <option value="her" {{ "selected" if u.who == "her" else "" }}>她（档案主人）</option>
+              <option value="him" {{ "selected" if u.who == "him" else "" }}>他（一起记录）</option>
+            </select>
+            <label style="display:inline-flex;align-items:center;gap:5px;font-size:.84rem;margin-left:6px">
+              <input type="checkbox" name="is_admin" value="1" style="width:auto"
+                     {{ "checked" if u.role == "admin" else "" }}> 管理员（系统配置）
+            </label>
+            <button class="btn small" type="submit">保存</button>
+          </form>
+        </td>
+        <td>{% if u.is_active %}<span class="tag ok">启用</span>{% else %}<span class="tag danger">停用</span>{% endif %}
+            {% if u.must_change_password %}<span class="tag warn">待改密</span>{% endif %}</td>
+        <td class="muted" style="font-size:.84rem">{{ u.last_login_at or "—" }}</td>
+        <td class="wrap">
+          <form class="inline" method="post" action="/admin/users/{{ u.id }}/password" data-confirm="重置 {{ u.username }} 的密码？">
+            <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+            <button class="btn ghost small" type="submit">重置密码</button>
+          </form>
+          {% if u.id != user.id %}
+          <form class="inline" method="post" action="/admin/users/{{ u.id }}/toggle">
+            <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+            <button class="btn ghost small" type="submit">{{ "停用" if u.is_active else "启用" }}</button>
+          </form>
+          <form class="inline" method="post" action="/admin/users/{{ u.id }}/delete" data-confirm="永久删除账号 {{ u.username }}？">
+            <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+            <button class="btn danger small" type="submit">删除</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+
+  <details class="fold">
+    <summary>＋ 新建账号</summary>
+    <form method="post" action="/admin/users" class="rowform c3">
+      <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+      <div><label for="nu">用户名 *（3–32 位小写字母/数字/._-）</label><input id="nu" type="text" name="username" required pattern="[a-z0-9_.\-]{3,32}"></div>
+      <div><label for="nd">显示名</label><input id="nd" type="text" name="display_name" placeholder="如 小王"></div>
+      <div><label for="nw">身份</label>
+        <select id="nw" name="who">
+          <option value="her">她（档案主人）</option>
+          <option value="him">他（一起记录）</option>
+          <option value="">未指定</option>
+        </select>
+      </div>
+      <div><label style="display:inline-flex;align-items:center;gap:6px;font-size:.88rem">
+        <input type="checkbox" name="is_admin" value="1" style="width:auto"> 管理员（可做系统配置）</label></div>
+      <div><label for="npp">初始密码（留空则自动生成并显示）</label><input id="npp" type="text" name="password" placeholder="留空自动生成"></div>
+      <div class="span2"><button class="btn" type="submit">创建</button></div>
+    </form>
+    <div class="note">新建账号默认对<b>全部数据</b>可读可写（两人互通）；是否管理员只影响系统配置页面的可见性。
+      首次登录都会被要求修改密码。</div>
+  </details>
+</div>
+
+<div class="card">
+  <h2>数据同步</h2>
+  <form method="post" action="/admin/sync/config" class="rowform c2">
+    <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+    <div class="span2"><label for="sr">要同步到的 GitHub 仓库（数据仓库，建议私有）</label>
+      <input id="sr" type="text" name="repo" value="{{ sync.repo }}"
+             placeholder="git@github.com:you/your-health-data.git"></div>
+    <div><label for="sb">分支</label><input id="sb" type="text" name="branch" value="{{ sync.branch }}"></div>
+    <div><label style="display:inline-flex;align-items:center;gap:6px;font-size:.88rem">
+      <input type="checkbox" name="enabled" value="1" style="width:auto" {{ "checked" if sync.enabled else "" }}>
+      允许同步（关闭＝数据只维护在本地）</label></div>
+    <div class="span2"><label style="display:inline-flex;align-items:center;gap:6px;font-size:.88rem">
+      <input type="checkbox" name="snapshot" value="1" style="width:auto" {{ "checked" if sync.snapshot else "" }}>
+      同时提交 SQLite 快照（完整可恢复，但会增大仓库体积）</label></div>
+    <div class="span2"><button class="btn" type="submit">保存同步设置</button></div>
+  </form>
+  <div class="note" style="margin:8px 0 4px">
+    <b>现在是「有改动就触发」</b>：任何改写数据的操作（记经期、记症状、上传配置、AI 归档…）
+    成功后会自动排队同步一次（默认 25 秒内的多次改动合并成一次，后台执行）。
+    没有定时任务，只有改动才会推送；万一进程正好在合并窗口里被重启，下次启动会补一次。
+    {% if sync_trigger %}<div class="muted" style="font-size:.78rem;margin-top:6px">{{ sync_trigger }}</div>{% endif %}
+  </div>
+  <form method="post" action="/admin/sync/run">
+    <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+    <button class="btn ghost" type="submit">立即同步（导出 → 提交 → 推送）</button>
+  </form>
+  <h3>同步凭据来源</h3>
+  <form method="post" action="/admin/sync/cred">
+    <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+    <div style="font-size:.88rem;line-height:2">
+      {% for k, label in {"auto":"用系统自带凭据（默认，运行账号的 ssh/gh 配置）","key":"用部署密钥（应用生成，公钥需加到仓库）","token":"用访问令牌（仅 https 地址）"}.items() %}
+      <label style="display:block">
+        <input type="radio" name="mode" value="{{ k }}" style="width:auto" {{ "checked" if sync.mode == k else "" }}>
+        {{ label }}
+      </label>
+      {% endfor %}
+    </div>
+    <button class="btn ghost small" type="submit">保存凭据来源</button>
+  </form>
+  <div class="note">凭据文件：<code>{{ sync.env_file }}</code>{% if sync.env_exists %}（已存在，权限 600）{% else %}（尚未创建，保存时自动创建）{% endif %}——
+    网页里填的密钥路径/令牌写入这里，该文件已在 <code>.gitignore</code> 中。</div>
+  <h3>仓库凭据</h3>
+  <dl class="kv">
+    <dt>部署密钥</dt>
+    <dd>{% if sync.key %}<span class="tag ok">已生成</span>{% else %}<span class="tag grey">未生成</span>{% endif %}
+      {% if sync.pub %}<div style="margin-top:4px"><code style="word-break:break-all;font-size:.78rem">{{ sync.pub }}</code></div>
+      <div class="muted" style="font-size:.78rem">把上面这行公钥加到仓库 Settings → Deploy keys，并勾选 write access</div>{% endif %}
+    </dd>
+    <dt>访问令牌</dt>
+    <dd>{% if sync.token %}<span class="tag ok">已设置</span> {{ sync.token_hint }}{% else %}<span class="tag grey">未设置</span>{% endif %}
+      <div class="muted" style="font-size:.78rem">仅对 https 形式的仓库地址生效；细粒度 PAT 需给 Contents: Read and write</div>
+    </dd>
+  </dl>
+  <div class="actions">
+    <form method="post" action="/admin/sync/keygen">
+      <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+      <button class="btn ghost small" type="submit">生成部署密钥</button>
+    </form>
+    <form method="post" action="/admin/sync/test">
+      <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+      <button class="btn ghost small" type="submit">测试仓库访问</button>
+    </form>
+  </div>
+  <form method="post" action="/admin/sync/token" class="rowform c2">
+    <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+    <input type="hidden" name="action" value="save">
+    <div><label for="tk">访问令牌（留空不改变；仅 https 仓库用）</label>
+      <input id="tk" type="password" name="token" autocomplete="new-password"
+             placeholder="{% if sync.token %}已保存 {{ sync.token_hint }}，输入新值可替换{% else %}粘贴 PAT{% endif %}"></div>
+    <div><button class="btn ghost small" type="submit">保存令牌</button></div>
+  </form>
+  <form method="post" action="/admin/sync/token" data-confirm="清除已保存的访问令牌？">
+    <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+    <input type="hidden" name="action" value="clear">
+    <button class="btn danger small" type="submit">清除令牌</button>
+  </form>
+  {% if sync.last %}<div class="note">上次同步：{{ sync.last }}</div>{% endif %}
+  {% if sync.last_test %}<div class="note">上次测试：{{ sync.last_test }}</div>{% endif %}
+  {% if request.query_params.get("pubkey") %}
+  <div class="flash warn"><b>公钥（加到 GitHub Deploy keys，勾 write access）</b><br>
+    <code style="word-break:break-all">{{ request.query_params.get("pubkey") }}</code></div>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>知识库（数据库）</h2>
+  <dl class="kv">
+    <dt>文档数</dt><dd>{{ kb.docs }} 篇{% for k, v in kb.by_dir.items() %}　·　{{ k }} {{ v }}{% endfor %}</dd>
+    <dt>索引</dt><dd>{{ kb.sections }} 个章节 · {{ kb.terms }} 个term（内存倒排，version {{ kb.index_version }}）</dd>
+    <dt>仓库目录</dt><dd><code>{{ kb_dir }}</code>（仅用于导入/导出，读取走数据库）</dd>
+  </dl>
+  <div class="actions">
+    <form method="post" action="/admin/kb/import">
+      <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+      <button class="btn ghost small" type="submit">从仓库导入到数据库</button>
+    </form>
+    <form method="post" action="/admin/kb/export">
+      <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+      <button class="btn ghost small" type="submit">把数据库写回仓库</button>
+    </form>
+  </div>
+  <div class="note">知识库以 SQLite 为唯一数据源；Markdown 文件只是给 git 与人工阅读的产物。</div>
+</div>
+
+<div class="card">
+  <h2>问答会话与上下文</h2>
+  <dl class="kv">
+    <dt>会话方式</dt><dd>一个账号一个固定会话（不轮转、不新建）</dd>
+    <dt>上下文整理</dt><dd>后端自动：对话超过 {{ chat.compress_over }} 条时把更早的内容压成摘要，每次只带最近 {{ chat.keep_recent }} 条原文</dd>
+    <dt>归档保留</dt><dd>{{ chat.retention_days }} 天（超期自动清理，此前一直可回看）</dd>
+    <dt>维护方式</dt><dd>每小时定时执行；每次回答后也会顺手检查一次</dd>
+  </dl>
+  <div class="note">
+    这些参数由程序自己决定，不需要手工设置；问答入口只在右下角的悬浮窗。
+  </div>
+</div>
+
+<div class="card">
+  <h2>数据备份与恢复</h2>
+  <dl class="kv">
+    <dt>自动备份</dt>
+    <dd>{% if bk.enabled %}<span class="tag ok">已开启</span>（{{ "每天" if bk.interval == "daily" else "每周" }}一次，保留最近 {{ bk.keep }} 份{% if bk.with_uploads %}，含照片{% endif %}）
+        {% else %}<span class="tag grey">已关闭</span>{% endif %}
+      <div class="muted" style="font-size:.78rem">由 <code>{{ user.app_slug if user.app_slug else "bunny-guardian" }}-backup.timer</code> 每小时触发，到期才真备</div>
+    </dd>
+    <dt>备份目录</dt><dd><code>{{ bk.dir }}</code>（在项目 <code>data/</code> 下，已 gitignore）</dd>
+    <dt>上次备份</dt><dd>{{ bk.last or "—" }}</dd>
+    <dt>上次恢复</dt><dd>{{ bk.last_restore or "—" }}</dd>
+  </dl>
+
+  <div class="actions">
+    <form method="post" action="/admin/backup/now">
+      <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+      <button class="btn" type="submit">立即备份（仅数据库）</button>
+    </form>
+    <form method="post" action="/admin/backup/now">
+      <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+      <input type="hidden" name="with_uploads" value="1">
+      <button class="btn ghost" type="submit">立即备份（含照片）</button>
+    </form>
+  </div>
+
+  <details class="fold">
+    <summary>⚙ 备份设置</summary>
+    <form method="post" action="/admin/backup/settings" class="rowform c2">
+      <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+      <div><label style="display:inline-flex;align-items:center;gap:6px;font-size:.88rem">
+        <input type="checkbox" name="enabled" value="1" style="width:auto" {{ "checked" if bk.enabled else "" }}>
+        开启定时备份</label></div>
+      <div><label for="bi">频率</label>
+        <select id="bi" name="interval">
+          <option value="daily" {{ "selected" if bk.interval == "daily" else "" }}>每天</option>
+          <option value="weekly" {{ "selected" if bk.interval == "weekly" else "" }}>每周</option>
+        </select>
+      </div>
+      <div><label for="bk2">保留份数</label><input id="bk2" type="number" name="keep" min="1" max="60" value="{{ bk.keep }}"></div>
+      <div><label style="display:inline-flex;align-items:center;gap:6px;font-size:.88rem">
+        <input type="checkbox" name="with_uploads" value="1" style="width:auto" {{ "checked" if bk.with_uploads else "" }}>
+        备份时包含照片（打包为 .tar.gz）</label></div>
+      <div class="span2"><button class="btn ghost small" type="submit">保存设置</button></div>
+    </form>
+  </details>
+
+  {% if backups %}
+  <h3>已有备份</h3>
+  <div class="tablewrap">
+    <table>
+      <tr><th>时间</th><th>大小</th><th>内容</th><th>文件</th><th></th></tr>
+      {% for b in backups %}
+      <tr>
+        <td class="muted" style="font-size:.82rem">{{ b.mtime }}</td>
+        <td>{{ b.size_h }}</td>
+        <td>{{ b.kind }}</td>
+        <td class="muted" style="font-size:.8rem">{{ b.name }}</td>
+        <td><a class="btn ghost small" href="/admin/backup/download/{{ b.name }}">下载</a></td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">还没有备份。建议先点一次「立即备份」，再到设置里开启定时备份。</div>
+  {% endif %}
+
+  <details class="fold">
+    <summary>↩︎ 恢复数据（谨慎：会用备份覆盖当前数据）</summary>
+    <div class="note">
+      恢复前系统会<b>自动把当前数据库另存一份</b>（<code>pre-restore-*.db</code>），恢复错了还能再换回来。
+      恢复后需要重启服务生效，系统会尽力自动重启。
+    </div>
+    {% if backups %}
+    <form method="post" action="/admin/backup/restore" class="rowform"
+          data-confirm="确认用所选备份覆盖当前数据？">
+      <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+      <div><label for="rn">选择服务器上的备份</label>
+        <select id="rn" name="name">
+          {% for b in backups %}<option value="{{ b.name }}">{{ b.mtime }} · {{ b.size_h }} · {{ b.kind }}</option>{% endfor %}
+        </select>
+      </div>
+      <div><label style="display:inline-flex;align-items:center;gap:6px;font-size:.88rem">
+        <input type="checkbox" name="confirm" value="yes" style="width:auto"> 我确认要覆盖当前数据</label></div>
+      <div><button class="btn danger" type="submit">从所选备份恢复</button></div>
+    </form>
+    {% endif %}
+    <form method="post" action="/admin/backup/restore-upload" enctype="multipart/form-data" class="rowform"
+          data-confirm="确认用上传的备份覆盖当前数据？">
+      <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+      <div><label for="bf">或上传备份文件（.db 或 .tar.gz，≤12MB）</label>
+        <input id="bf" type="file" name="file" required accept=".db,.gz,application/octet-stream"></div>
+      <div><label style="display:inline-flex;align-items:center;gap:6px;font-size:.88rem">
+        <input type="checkbox" name="confirm" value="yes" style="width:auto"> 我确认要覆盖当前数据</label></div>
+      <div><button class="btn danger" type="submit">上传并恢复</button></div>
+    </form>
+  </details>
+</div>
+
+<div class="card">
+  <h2>导出到知识库仓库</h2>
+  <p style="font-size:.92rem">把当前数据库中的经期、疾病、就医记录生成 Markdown 文档写入仓库 <code>docs/</code>，并可提交推送到 GitHub 私有仓库。</p>
+  <form method="post" action="/export">
+    <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+    <label style="display:inline-flex;align-items:center;gap:6px;font-size:.9rem">
+      <input type="checkbox" name="push" value="1" checked style="width:auto"> 同时推送到 GitHub
+    </label>
+    <div><button class="btn" type="submit">导出并提交</button></div>
+  </form>
+  <div class="note">导出的文档会覆盖同名文件（周期记录 / 周期统计 / 疾病列表 / 各疾病档案 / 就诊记录）。检查单照片等附件不导出。</div>
+</div>
+
+<div class="card">
+  <h2>审计日志（最近 40 条）</h2>
+  <div class="tablewrap">
+    <table>
+      <tr><th>时间</th><th>用户</th><th>动作</th><th class="wrap">详情</th><th>IP</th></tr>
+      {% for l in logs %}
+      <tr>
+        <td class="muted" style="font-size:.82rem">{{ l.created_at }}</td>
+        <td>{{ l.username or "—" }}</td>
+        <td>{{ l.action }}</td>
+        <td class="wrap" style="font-size:.84rem">{{ l.detail }}</td>
+        <td class="muted" style="font-size:.82rem">{{ l.ip }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}

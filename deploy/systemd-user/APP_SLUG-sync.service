@@ -1,0 +1,8 @@
+[Unit]
+Description=同步 @@APP_NAME@@ 知识库到远端（用户级）
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=@@INSTALL_ROOT@@/deploy/sync.sh
+Nice=10

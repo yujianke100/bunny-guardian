@@ -1,0 +1,10 @@
+{# 激素变化示意图：教科书模型，不是实测值（本系统不测激素），图上与说明都要标明。 #}
+{% if hormone %}
+<div class="card" id="blk-hormone">
+  <h3>🧪 激素变化（示意图）</h3>
+  <div class="chart-panel">{{ hormone|safe }}</div>
+  <div class="note">雌激素、LH、孕激素随周期的<b>典型走向</b>：教科书模型，<b>不是你的实测值</b>（本系统不测激素）；
+    虚线是今天的位置。阶段划分按你的（中位周期, 中位经期）＝（{{ ring.cycle_len }}, {{ ring.period_len }} 天）。
+  </div>
+</div>
+{% endif %}

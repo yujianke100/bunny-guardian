@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block content %}
+<p><a class="btn ghost small" href="/admin">← 返回系统管理</a></p>
+<h1>AI 角色</h1>
+
+{% if msg %}<div class="flash ok">{{ msg }}</div>{% endif %}
+{% if err %}<div class="flash err">{{ err }}</div>{% endif %}
+
+<div class="card">
+  <h2>当前生效</h2>
+  <dl class="kv">
+    <dt>名字</dt><dd>{{ cfg.current.name }}{% if not cfg.current.custom %}（默认）{% endif %}</dd>
+    <dt>图标</dt><dd>{% if cfg.current.icon %}<span class="pico">{{ cfg.current.icon }}</span> 自定义{% else %}内置小兔子（SVG）{% endif %}</dd>
+    <dt>显示位置</dt><dd>右下角那颗按钮、对话面板标题都显示「图标 + 名字」</dd>
+    <dt>提示词来源</dt><dd>{% if cfg.current.custom %}管理员自定义{% else %}内置默认（守护兔）{% endif %}</dd>
+  </dl>
+  <details class="fold">
+    <summary>看看当前用的提示词</summary>
+    <pre style="white-space:pre-wrap;font-size:.84rem;line-height:1.55;margin:8px 0 0">{{ cfg.current.prompt }}</pre>
+  </details>
+</div>
+
+<div class="card">
+  <h2>修改角色</h2>
+  <form method="post" action="/admin/persona/save">
+    <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+    <div><label for="pi">图标（留空＝内置的小兔子；也可以填一个 emoji，比如 🐻 🩺 🌸）</label>
+      <input id="pi" type="text" name="icon" maxlength="4" value="{{ cfg.icon }}" placeholder="🐰"></div>
+    <div style="margin-top:10px"><label for="pn">名字（最多 20 字）</label>
+      <input id="pn" type="text" name="name" maxlength="20" value="{{ cfg.name }}"
+             placeholder="{{ defaults.name }}"></div>
+    <div style="margin-top:10px">
+      <label for="pp">提示词（说话的样子、回答的结构；留空＝默认守护兔）</label>
+      <textarea id="pp" name="prompt" rows="14" style="width:100%;font-size:.88rem;line-height:1.6"
+                placeholder="{{ defaults.prompt }}">{{ cfg.prompt }}</textarea>
+    </div>
+    <p class="muted" style="font-size:.8rem">
+      提示词会被放在系统提示的开头，后面仍然跟着固定的安全规则（不做诊断、不给药物剂量、
+      必须给就医建议、记录必须走待确认）。所以你可以改语气和结构，改不掉这些底线。
+    </p>
+    <button class="btn" type="submit">保存角色</button>
+  </form>
+  <form method="post" action="/admin/persona/reset" data-confirm="恢复成默认的「守护兔」？">
+    <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+    <button class="btn ghost" type="submit">恢复默认（守护兔）</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>默认的守护兔在做什么</h2>
+  <ul style="font-size:.92rem">
+    <li>先用一句温柔的话接住情绪，再讲事情；不是冷冰冰的条目堆砌。</li>
+    <li>每次回答按三步：<b>① 情况梳理 → ② 可能的原因（常见/较少见，说清什么情况要就医）→ ③ 接下来怎么办</b>（今天就能做的事）。</li>
+    <li>他（男友）来问的时候，提示词里会额外加一段身份说明：这些话是<b>转述</b>，需要她本人确认的细节要提醒他去问。</li>
+    <li>知识库不够时会自己上网查公开资料，并<b>自动把值得留下的资料收进知识库</b>（本地保存，不往仓库备份）。</li>
+  </ul>
+  <pre style="white-space:pre-wrap;font-size:.82rem;line-height:1.55;background:var(--bg);padding:10px;border-radius:12px">{{ defaults.prompt }}</pre>
+</div>
+{% endblock %}

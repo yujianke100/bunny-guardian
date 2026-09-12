@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>病历与就医</h1>
+
+<div class="card">
+  <h2>🗂 时间轴</h2>
+  <div class="recbar">
+    <span class="viewtoggle" role="tablist" aria-label="时间范围">
+      {% for k, v in spans.items() %}
+      <a href="?span={{ k }}" role="tab" aria-selected="{{ 'true' if span == k else 'false' }}"
+         class="{{ 'on' if span == k else '' }}">{{ v[0] }}</a>
+      {% endfor %}
+    </span>
+    <form class="inline recspan" method="get" action="/records">
+      <input type="date" name="start" value="{{ start }}" aria-label="开始日期">
+      <span class="muted">~</span>
+      <input type="date" name="end" value="{{ end }}" aria-label="结束日期">
+      <button class="btn ghost small" type="submit">自定义区间</button>
+    </form>
+  </div>
+  <div class="note" style="margin-top:8px">
+    {{ span_label }}{% if range_text %}：{{ range_text }}{% endif %} · 共 <b>{{ entries|length }}</b> 条。
+    这里同时显示疾病、就医，以及在日历里记的每日症状/用药/体重。不必手填：
+    在右下角问答里说一句（时间、医院、检查结果都行），助手会给出待确认的条目，你点「确认」才写入。
+  </div>
+
+  {% if entries %}
+  <div class="timeline">
+    {% for e in entries %}
+    <div class="tle {{ 'tle-visit' if e.kind == 'visit' else ('tle-log' if e.kind == 'log' else 'tle-event') }}">
+      <div class="tle-date">{{ e.date }}</div>
+      <div class="tle-body">
+        <div class="tle-head">
+          <span class="tag {{ 'ok' if e.kind == 'visit' else ('warn' if e.kind == 'log' else 'grey') }}">{{ e.type_cn }}</span>
+          <b>{{ e.title }}</b>
+          {% if e.cid %}<a class="tle-link" href="/conditions/{{ e.cid }}">{{ e.cname }} →</a>{% endif %}
+        </div>
+        {% if e.detail %}<div class="kvline">{{ e.detail }}</div>{% endif %}
+        {% if e.result %}<div class="kvline muted">结果：{{ e.result }}</div>{% endif %}
+        {% for label, value in e.lines %}
+        <div class="kvline"><span class="muted">{{ label }}</span> {{ value }}</div>
+        {% endfor %}
+        {% if can_edit %}
+        <form class="inline tle-del" method="post" data-confirm="删除这条记录？"
+              action="{% if e.kind == 'visit' %}/visits/delete/{{ e.id }}{% elif e.kind == 'log' %}/cycle/log/delete/{{ e.id }}{% else %}/conditions/{{ e.cid }}/event/{{ e.id }}/delete{% endif %}">
+          <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+          <button class="btn danger small" type="submit">删除</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty">这段时间没有记录。想新增就问一句，例如
+    「今天去市一院内分泌科复查，TSH 2.1，医生让我继续吃原来的剂量」——
+    助手会先给出待确认的条目，你确认后才写入。</div>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>🩺 疾病档案（{{ conditions|length }}）</h2>
+  {% if conditions %}
+  <div class="tablewrap">
+    <table>
+      <tr><th>疾病</th><th>状态</th><th>起病 / 确诊</th><th>事件</th><th class="wrap">说明</th><th></th></tr>
+      {% for c in conditions %}
+      <tr>
+        <td><a href="/conditions/{{ c.id }}">{{ c.name }}</a>
+          {% if c.category %}<div class="muted" style="font-size:.76rem">{{ c.category }}</div>{% endif %}</td>
+        <td><span class="tag {{ {'active': 'danger', 'monitoring': 'warn'}.get(c.status, 'ok') }}">{{ status_cn.get(c.status, c.status) }}</span></td>
+        <td>{{ c.onset_date or "—" }}
+          {% if c.diagnosed_date %}<div class="muted" style="font-size:.76rem">确诊 {{ c.diagnosed_date }}</div>{% endif %}</td>
+        <td>{{ c.n_events }} 条
+          {% if c.last_event %}<div class="muted" style="font-size:.76rem">最近 {{ c.last_event }}</div>{% endif %}</td>
+        <td class="wrap muted">{{ c.summary or "—" }}</td>
+        <td><a class="btn ghost small" href="/conditions/{{ c.id }}">详情</a></td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% else %}<div class="empty">还没有疾病档案。同样可以在问答里说一句「确诊了 XX，什么时候开始的」来登记。</div>{% endif %}
+</div>
+{% endblock %}

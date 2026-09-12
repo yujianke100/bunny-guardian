@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+<p><a class="btn ghost small" href="/knowledge">← 返回知识库</a></p>
+<h1>{{ meta.get("title", rel) }}</h1>
+<p class="muted" style="font-size:.84rem">
+  docs/{{ rel }}
+  {% if meta.get("last_updated") %} · 更新 {{ meta.get("last_updated") }}{% endif %}
+  {% if meta.get("status") %} · {{ meta.get("status") }}{% endif %}
+</p>
+{% if meta.get("tags") %}
+<p>{% for t in meta.get("tags") %}<span class="tag grey">{{ t }}</span>{% endfor %}</p>
+{% endif %}
+{% if meta.get("source") %}
+<div class="note"><b>主要来源：</b>{{ meta.get("source") }}</div>
+{% endif %}
+
+<div class="card doc">
+{{ content|safe }}
+</div>
+
+{% if related and (related.out or related.incoming) %}
+{% set ro = related.get("out") or [] %}
+{% set ri = related.incoming or [] %}
+<div class="card">
+  <h2>🔗 相关文档</h2>
+  {% if ro %}
+  <p style="font-size:.9rem;margin:0 0 6px"><b>本篇提到：</b></p>
+  <p style="margin:0 0 10px">
+    {% for r in ro %}
+      {% if r.exists %}<a class="btn ghost small" href="/knowledge?path={{ r.rel|urlencode }}">{{ r.label }}</a>
+      {% else %}<span class="tag grey" title="这篇文档还没建">{{ r.label }}（未建）</span>{% endif %}
+    {% endfor %}
+  </p>
+  {% endif %}
+  {% if ri %}
+  <p style="font-size:.9rem;margin:0 0 6px"><b>哪些文档提到本篇：</b></p>
+  <p style="margin:0">
+    {% for r in ri %}<a class="btn ghost small" href="/knowledge?path={{ r.rel|urlencode }}">{{ r.label }}</a>{% endfor %}
+  </p>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if active_dir != "医学知识" %}
+<div class="note">
+  这是个人数据文档，由 WebUI「导出到知识库」生成；如需修改数据，请在对应页面编辑后重新导出。
+</div>
+{% endif %}
+{% endblock %}

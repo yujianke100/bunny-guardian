@@ -1,0 +1,109 @@
+{# 周期环：钟表式一圈，12 点方向为周期第 1 天；环上的白底圆牌指向「今天」。
+   legend_items 由 phases.for_view(view) 提供，点图例可展开该阶段的详细说明。 #}
+<div id="blk-ring">
+<div class="card">
+  <div class="ring-head">
+    <h2 style="margin:0">🌙 周期环</h2>
+    <div class="viewtoggle" role="tablist" aria-label="周期分期视角">
+      {% for k, v in ring_views.items() %}
+        <a href="?view={{ k }}" role="tab" aria-selected="{{ 'true' if ring.view == k else 'false' }}"
+           class="{{ 'on' if ring.view == k else '' }}">{{ v.label }}</a>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="ringwrap">
+    <svg class="ring" viewBox="0 0 240 240" role="img"
+         aria-label="周期环：当前{{ ring.center.phase }}，周期第 {{ ring.center.day }} 天">
+      {# 环底：分段之间的空隙会露出它，读作「轨道」而非「缺数据」 #}
+      <circle cx="120" cy="120" r="{{ '%.1f'|format(ring.radius) }}" fill="none"
+              stroke="{{ ring.track }}" stroke-width="{{ ring.stroke }}"/>
+      {% for s in ring.segments %}
+      <path d="{{ s.path }}" fill="none" stroke="{{ s.color }}"
+            stroke-width="{{ ring.stroke }}" stroke-linecap="round">
+        <title>{{ s.label }}（{{ s.days }}）</title>
+      </path>
+      {% endfor %}
+      {# 估算排卵日：六边形标记，表示「事件」而不是「一段时期」 #}
+      <polygon class="ring-ovu" points="{{ ring.ovulation.points }}"
+               fill="{{ ring.ovulation.color }}" stroke="#ffffff" stroke-width="2"
+               stroke-linejoin="round">
+        <title>{{ ring.ovulation.label }}</title>
+      </polygon>
+      {# 今天：白底圆牌压在环上，牌内写周期第几天；加阴影让它在环上更跳出来 #}
+      <g class="ring-today-badge">
+        <circle class="ring-today" cx="{{ ring.marker.x }}" cy="{{ ring.marker.y }}"
+                r="{{ ring.marker.r }}" fill="#ffffff" stroke="#ffffff" stroke-width="2.5"/>
+        <text x="{{ ring.marker.x }}" y="{{ ring.marker.y + 4.2 }}" text-anchor="middle"
+              font-size="11.5" font-weight="700" fill="{{ ring.marker.color }}">{{ ring.marker.text }}</text>
+      </g>
+    </svg>
+    <div class="ring-center">
+      <div class="rc-count-label">{{ ring.center.count_label }}</div>
+      {% if ring.center.count_num %}
+        <div class="rc-count">{{ ring.center.count_num }}<small>天</small></div>
+      {% endif %}
+      {% if ring.center.example %}
+        <div class="rc-day">待录入</div>
+      {% else %}
+        <div class="rc-day">周期第 {{ ring.center.day }} / {{ ring.cycle_len }} 天</div>
+      {% endif %}
+      <a class="btn small rc-btn" href="{{ record_href|default('/cycle') }}"
+         {% if record_inline %}data-record-menstruation="1"{% endif %}>记录月经</a>
+    </div>
+  </div>
+
+  <div class="rc-meta">{{ ring.meta }}</div>
+
+  <div class="lgrow">
+    {% for l in legend_items %}
+    <button class="lgchip" type="button" data-phase="{{ l.key }}" aria-haspopup="dialog">
+      <i class="{{ 'hx' if l.key == 'ovulation' else 'dt' }}" style="background:{{ l.color }}"></i>
+      <span>{{ l.label }}</span>
+    </button>
+    {% endfor %}
+  </div>
+
+  <div class="ringkey">
+    <span><i class="k-ovu"></i>紫色六边形＝估算排卵日（第 {{ ring.ovulation.day }} 天）</span>
+  </div>
+
+  <div class="note" style="margin-top:12px">{{ ring.view_hint }}</div>
+
+  {% if ring.view == 'plain' %}
+  <div class="flash warn">
+    <b>关于「安全期」：</b>它由日历推算得出，而受精窗口在每个周期里的实际位置都可能变化，
+    因此<b>不能作为避孕依据</b>，也不代表这些日子一定不会受孕。
+    <a href="https://www.acog.org/womens-health/faqs/fertility-awareness-based-methods-of-family-planning"
+       target="_blank" rel="noopener">ACOG 相关说明</a> ·
+    <a href="/{{ kb_cycle_doc_url }}">知识库：日历法为什么不可靠 →</a>
+  </div>
+  {% endif %}
+</div>
+
+{# ---- 阶段说明：点图例弹出（无 JS 时下面的 template 不显示，不影响页面主体） ---- #}
+<dialog class="phasedlg" id="phaseDlg" aria-labelledby="phaseDlgTitle">
+  <div class="dlghead">
+    <b id="phaseDlgTitle">阶段说明</b>
+    <button type="button" class="dlgx" data-dlg-close="1" aria-label="关闭">×</button>
+  </div>
+  <div class="dlgbody" id="phaseDlgBody"></div>
+</dialog>
+{% for l in legend_items %}
+<template class="phase-tpl" data-phase-tpl="{{ l.key }}">
+  <p class="dlgtag">{{ l.info.tagline }}</p>
+  <h4>体内在发生什么</h4>
+  <p>{{ l.info.body }}</p>
+  <h4>常见感受</h4>
+  <p>{{ l.info.feel }}</p>
+  <h4>受孕可能性</h4>
+  <p>{{ l.info.fertility }}</p>
+  <h4>可以记什么</h4>
+  <ul>{% for r in l.info.record %}<li>{{ r }}</li>{% endfor %}</ul>
+  <div class="dlgsrc">来源：
+    {% for t, u in l.info.sources %}<a href="{{ u }}" target="_blank" rel="noopener">{{ t }}</a>{% if not loop.last %} · {% endif %}{% endfor %}
+  </div>
+</template>
+{% endfor %}
+</div>
+{# blk-ring 结束：整块（卡片＋弹层＋说明模板）由打勾接口整体换掉，避免残留旧节点 #}

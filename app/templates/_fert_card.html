@@ -1,0 +1,33 @@
+{# 受孕率卡：版式参照主流经期 App——渐变标题栏 + 内嵌浅色面板（曲线图 + 图例）+ 说明。
+   数字口径见 fertility.py（Wilcox 1995 NEJM 表 1）：群体平均，必须写明不能用于避孕。 #}
+{% if fert %}
+<div class="card fertcard" id="blk-fert">
+  <h2>💗 受孕率</h2>
+  <div class="fert-panel">
+    {{ fert.chart|safe }}
+    {% if view == 'med' %}
+    <div class="fert-legend">
+      <span><i style="background:{{ ring_colors.menstrual }}"></i>月经期</span>
+      <span><i style="background:{{ ring_colors.follicular }}"></i>卵泡期</span>
+      <span><i style="background:{{ ring_colors.ovulation }}"></i>排卵期</span>
+      <span><i class="penta" style="background:{{ ring_colors.ovulation }}"></i>排卵日</span>
+      <span><i style="background:{{ ring_colors.luteal }}"></i>黄体期</span>
+    </div>
+    {% endif %}
+  </div>
+  <div class="fert-info">
+    <div>今日 <b>{{ fert.pct if fert.in_window else '≈0' }}%</b>　{{ fert.label }}</div>
+    {% if fert.ovulation %}
+    <div class="muted" style="font-size:.76rem">估算排卵日 {{ fert.ovulation }} ·
+      <a href="{{ fert.source_url }}" target="_blank" rel="noopener">{{ fert.source_title }}</a>
+    </div>
+    {% endif %}
+  </div>
+  <div class="note">曲线是<b>健康备孕人群的群体平均</b>（不是你的实测值，也不是对你个人的预测）：
+    排卵前 5 天约 10%、前 2 天 27%、前一天 31%、排卵日 33%，六天窗口外该研究未观察到妊娠
+    （置信区间上限约 12%）。排卵日由日历推算，会随周期波动。<b>不能用于避孕</b>——窗口外不等于安全期，
+    也不作为备孕建议。
+    <a href="/{{ kb_cycle_doc_url }}">知识库：日期推算法为什么不可靠 →</a>
+  </div>
+</div>
+{% endif %}

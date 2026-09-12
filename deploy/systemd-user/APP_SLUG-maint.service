@@ -1,0 +1,8 @@
+[Unit]
+Description=维护 @@APP_NAME@@ 问答会话上下文（压缩/清理）
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=@@INSTALL_ROOT@@/deploy/maint.sh
+Nice=15

@@ -1,0 +1,88 @@
+<div class="card" id="blk-stats">
+  <h2>📊 统计与分布</h2>
+  {% if dist.n_cycles == 0 %}
+  <div class="empty">还没有经期记录。录两次以上，这里就会给出周期长度、经期天数、经量与症状的分布。</div>
+  {% else %}
+  <div class="note" style="margin-top:0">
+    已有记录：{{ dist.n_cycles }} 次经期{% if dist.n_gaps %}、{{ dist.n_gaps }} 个完整间隔{% endif %}{% if dist.n_logged_days %}、{{ dist.n_logged_days }} 天日志{% endif %}{% if dist.span_days %}；覆盖 {{ dist.span_days }} 天{% endif %}。
+    {% if not dist.enough %}完整间隔只有 {{ dist.n_gaps }} 个（{{ dist.min_cycles }} 个以上才谈得上趋势），下面的分布先当参考。{% endif %}
+  </div>
+
+  <div class="dist">
+    <div class="dist-col">
+      <h3>周期长度</h3>
+      {% if dist.cycle_len.n %}
+      <div class="kvline">中位 <b>{{ dist.cycle_len.median }}</b> 天 · 范围 {{ dist.cycle_len.min }}–{{ dist.cycle_len.max }} 天</div>
+      {% set mx = dist.cycle_len.buckets | map(attribute='n') | max %}
+      <div class="bars">
+        {% for b in dist.cycle_len.buckets %}
+        <div class="bar"><span class="lb">{{ b.label }}</span><i style="width:{{ ((b.n / mx * 100) if mx else 0) | round(1) }}%"></i><b>{{ b.n }}</b></div>
+        {% endfor %}
+      </div>
+      <div class="chips">
+        {% for it in dist.cycle_len.intervals %}<span class="chip">{{ it.label }} <b>{{ it.value }}</b> 天</span>{% endfor %}
+      </div>
+      {% else %}
+      <div class="empty">还差一个完整间隔：有两次经期开始日期后才能算。</div>
+      {% endif %}
+    </div>
+
+    <div class="dist-col">
+      <h3>经期天数</h3>
+      {% if dist.period_len.n %}
+      <div class="kvline">中位 <b>{{ dist.period_len.median }}</b> 天 · 范围 {{ dist.period_len.min }}–{{ dist.period_len.max }} 天</div>
+      {% set mp = dist.period_len.buckets | map(attribute='n') | max %}
+      <div class="bars">
+        {% for b in dist.period_len.buckets %}
+        <div class="bar"><span class="lb">{{ b.label }}</span><i style="width:{{ ((b.n / mp * 100) if mp else 0) | round(1) }}%"></i><b>{{ b.n }}</b></div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty">还没有经期结束日期：日历上点该段靠后的一天即可缩短，从而记下结束日。</div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if dist.flow.n %}
+  <h3>经量（共 {{ dist.flow.n }} 次）</h3>
+  {% set mf = dist.flow.rows | map(attribute='n') | max %}
+  <div class="bars">
+    {% for r in dist.flow.rows %}
+    <div class="bar"><span class="lb">{{ r.label }}</span><i style="width:{{ ((r.n / mf * 100) if mf else 0) | round(1) }}%"></i><b>{{ r.n }}</b></div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if dist.symptoms %}
+  <h3>症状与日志（出现次数）</h3>
+  {# 名字长的症状用表格完整显示（原来挤在 62px 的进度条标签里被省略号吃掉），
+     超过 10 条时下面出现翻页 #}
+  <div class="symptable" data-page-size="10">
+    <table class="sympt">
+      <thead><tr><th>症状 / 日志</th><th class="num">次数</th><th class="num">占比</th></tr></thead>
+      <tbody>
+        {% for s in dist.symptoms %}
+        <tr><td class="nm">{{ s.name }}</td><td class="num"><b>{{ s.n }}</b></td>
+            <td class="num muted">{{ s.pct }}%</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div class="pager" hidden>
+      <button class="btn ghost small" type="button" data-pg="prev">上一页</button>
+      <span class="muted" data-pg-info></span>
+      <button class="btn ghost small" type="button" data-pg="next">下一页</button>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if dist.phase_links %}
+  <h3>症状最常出现在哪个阶段</h3>
+  <div class="dist">
+    {% for l in dist.phase_links %}
+    <div class="kvline">{{ l.name }}：共 {{ l.total }} 次，其中 <b>{{ l.in_phase }}</b> 次出现在{{ l.phase }}（{{ l.share }}%）</div>
+    {% endfor %}
+  </div>
+  <div class="note">这一栏要靠每日日志：连续记两三个周期后才能看出规律（日志可由助手问答里登记，或直接写进数据仓库的 md 再导入）。</div>
+  {% endif %}
+  {% endif %}
+</div>

@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>联网检索（云浏览器）</h1>
+
+{% if msg %}<div class="flash ok">{{ msg }}</div>{% endif %}
+{% if err %}<div class="flash err">{{ err }}</div>{% endif %}
+
+<div class="card">
+  <h2>当前状态</h2>
+  <dl class="kv">
+    <dt>开关</dt><dd>{% if cfg.enabled %}<span class="tag ok">已开启</span>{% else %}<span class="tag grey">关闭</span>{% endif %}</dd>
+    <dt>是否可用</dt><dd>{% if cfg.ready %}<span class="tag ok">可以检索</span>{% else %}<span class="tag grey">不可用（缺开关或密钥）</span>{% endif %}</dd>
+    <dt>接口地址</dt><dd><code>{{ cfg.base_url }}</code></dd>
+    <dt>密钥</dt>
+    <dd>{% if cfg.key_set %}<span class="tag ok">已配置</span> {{ cfg.key_hint }}{% else %}<span class="tag grey">未配置</span>{% endif %}</dd>
+    <dt>密钥文件</dt><dd><code>{{ key_path }}</code>（权限 600，不进数据库）</dd>
+    <dt>最近测试</dt><dd>{% if cfg.last_check %}{{ cfg.last_check }}{% else %}<span class="muted">尚未测试</span>{% endif %}</dd>
+  </dl>
+  <form method="post" action="/admin/search/test">
+    <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+    <button class="btn ghost" type="submit">测试连接（会消耗一次检索额度）</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>修改配置</h2>
+  <form method="post" action="/admin/search/save" class="rowform c2">
+    <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+    <div class="span2">
+      <label style="display:inline-flex;align-items:center;gap:6px;font-size:.88rem">
+        <input type="checkbox" name="enabled" value="1" style="width:auto"
+               {{ "checked" if cfg.enabled else "" }}>
+        允许助手在知识库不够时联网检索公开资料
+      </label>
+    </div>
+    <div class="span2">
+      <label for="bu">接口地址（默认 Hyperbrowser 官方）</label>
+      <input id="bu" type="text" name="base_url" value="{{ cfg.base_url }}"
+             placeholder="https://api.hyperbrowser.ai">
+    </div>
+    <div class="span2">
+      <label for="ky">Hyperbrowser API Key（留空＝保持现有密钥）</label>
+      <input id="ky" type="password" name="api_key" autocomplete="new-password"
+             placeholder="{% if cfg.key_set %}已保存 {{ cfg.key_hint }}，输入新值可替换{% else %}粘贴密钥（在 hyperbrowser.ai 后台获取）{% endif %}">
+    </div>
+    <div class="span2"><button class="btn" type="submit">保存配置</button></div>
+  </form>
+  <form method="post" action="/admin/search/key/clear" data-confirm="清除已保存的 Hyperbrowser 密钥？">
+    <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+    <button class="btn danger" type="submit">清除密钥</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>数据边界（重要）</h2>
+  <ul style="font-size:.92rem">
+    <li><b>发出去的只有检索词</b>：提问会先摘掉日期、邮箱、链接，再过一遍外发策略；
+        命中姓名、站点专属词等敏感内容时<b>直接放弃联网</b>，不会猜测或改写后发送。</li>
+    <li><b>发回来的是公开网页</b>：抓到的正文作为「依据」连同来源 URL 一起给模型，
+        回复里必须写明来源；这些内容会随该次问答进入你配置的模型端点。</li>
+    <li><b>抓取失败会明说</b>：扫描件、需要登录的页面、纯 JS 渲染页拿不到正文时，
+        助手会告诉用户「没查到外部资料」，而不是编一个答案。</li>
+    <li><b>健康档案本身不会发给 Hyperbrowser</b>：只发检索词，不发档案、不发照片。</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h2>为什么不用官方 SDK</h2>
+  <p style="font-size:.92rem">这台服务器只有 961MB 内存（应用自己占 81MB）。实测在本机：</p>
+  <div style="overflow-x:auto">
+  <table style="font-size:.88rem;width:100%;min-width:520px;border-collapse:collapse">
+    <tr><th align="left">方式</th><th align="left">额外内存</th><th align="left">额外磁盘</th><th align="left">结论</th></tr>
+    <tr><td>标准库 urllib 直连 REST（当前实现）</td><td><b>0</b></td><td><b>0</b></td><td>采用</td></tr>
+    <tr><td>官方 Python SDK（hyperbrowser）</td><td>+35.9MB（import 即发生，httpx+pydantic）</td><td>约 7MB</td><td>不需要</td></tr>
+    <tr><td>官方 Node SDK（@hyperbrowser/sdk）</td><td>+40.8MB（一个 Node 进程，与主应用不共享）</td><td>约 90MB（Node 运行时）+ 依赖</td><td>更重，还要装 Node</td></tr>
+  </table>
+  </div>
+  <p class="muted" style="font-size:.84rem">
+    我们只用两个接口（<code>/api/web/search</code> 与 <code>/api/web/fetch</code>），
+    用标准库发 JSON 请求即可，省下的内存留给应用本身。
+  </p>
+</div>
+
+<div class="card">
+  <h2>费用</h2>
+  <ul style="font-size:.92rem">
+    <li>Hyperbrowser 免费档：<b>5,000 credits</b>（1 credit = $0.001，约合 $5 用量）、1 个并发浏览器、数据保留 7 天。</li>
+    <li>超出后按 <b>$0.10/浏览器小时</b>、<b>$10/GB 代理流量</b> 计费（付费档 $30/月起）。</li>
+    <li>本站一次「知识库不够」的问答通常消耗 1 次搜索 + 1~2 次抓取；同一检索词 10 分钟内会走缓存，不重复扣。</li>
+  </ul>
+</div>
+{% endblock %}

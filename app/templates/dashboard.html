@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>总览</h1>
+
+{% if info.example %}
+<div class="flash warn">还没有经期记录。先在「经期」页添加一次月经开始日期，系统才能给出周期与阶段推断。</div>
+{% endif %}
+
+{# 1) 周期环：圆心有「记录月经」，点了直接去经期页的日历位置 #}
+{% include "_ring.html" %}
+
+{# 2) 当前阶段 #}
+<div class="card phase-{{ info.phase }}">
+  <h2 style="margin-bottom:.6em">
+    {{ info.phase_cn }}
+    {% if info.cycle_day %}<span class="tag">周期第 {{ info.cycle_day }} 天</span>{% endif %}
+    {% if not info.example %}<span class="tag grey">推断置信度：{{ info.confidence }}</span>{% endif %}
+  </h2>
+  <div class="grid three">
+    <div class="stat">
+      <span class="v">{{ info.cycle_len }}<small style="font-size:.6em"> 天</small></span>
+      <span class="k">推断周期长度（中位数）</span>
+    </div>
+    <div class="stat">
+      <span class="v">{{ info.next_start or "—" }}</span>
+      <span class="k">推断下次经期起始{% if info.days_to_next is not none %}（还有 {{ info.days_to_next }} 天）{% endif %}</span>
+    </div>
+    <div class="stat">
+      <span class="v">{{ info.period_len }}<small style="font-size:.6em"> 天</small></span>
+      <span class="k">推断经期长度</span>
+    </div>
+  </div>
+  {% if info.next_window %}
+  <div class="note">
+    <b>推断区间：</b>{{ info.next_window[0] }} ~ {{ info.next_window[1] }}；
+    <b>估算排卵日：</b>{{ info.ovulation_date }}；
+    <b>估算易孕窗口：</b>{{ info.fertile_window[0] }} ~ {{ info.fertile_window[1] }}。
+    以上均为<b>统计推断</b>（{{ info.confidence_reason }}），不是检测结果，不能用于避孕或备孕决策。
+  </div>
+  {% endif %}
+  {% if info.irregular_flags %}
+  <div class="flash warn">
+    <b>记录中的异常提示：</b>
+    <ul style="margin:.4em 0 0;padding-left:1.2em">
+      {% for f in info.irregular_flags %}<li>{{ f }}</li>{% endfor %}
+    </ul>
+    <a class="btn ghost small" href="/knowledge?path=医学知识/月经异常的判定标准.md">对照判定标准 →</a>
+  </div>
+  {% endif %}
+</div>
+
+{# 3) 病历与就医（疾病事件与就医合成一条时间轴，最近几条在这里，全部在「病历」页） #}
+<div class="card">
+  {# 这里只展示最近 4 条（封顶，不会因为记录多了撑爆），全部在「病历」页 #}
+  <h2>🩺 病历与就医</h2>
+  {% if recent_entries %}
+  <div class="timeline timeline-mini">
+    {% for e in recent_entries %}
+    <div class="tle {{ 'tle-visit' if e.kind == 'visit' else 'tle-event' }}">
+      <div class="tle-date">{{ e.date }}</div>
+      <div class="tle-body">
+        <div class="tle-head">
+          <span class="tag {{ 'ok' if e.kind == 'visit' else 'grey' }}">{{ e.type_cn }}</span>
+          <b>{{ e.title }}</b>
+          {% if e.cid %}<a class="tle-link" href="/conditions/{{ e.cid }}">{{ e.cname }} →</a>{% endif %}
+        </div>
+        {% if e.detail %}<div class="kvline">{{ e.detail }}</div>{% endif %}
+        {% for label, value in e.lines[:2] %}
+        <div class="kvline"><span class="muted">{{ label }}</span> {{ value }}</div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty">还没有病历或就医记录。想新增就在右下角问一句
+    （例如「今天去市一院复查，医生让继续吃原来的剂量」），助手会先给出待确认的条目。</div>
+  {% endif %}
+  <div class="actions"><a class="btn ghost small" href="/records">全部记录 →</a></div>
+</div>
+
+{# 4) 激素变化（示意图；只在医学分期视角出现） #}
+{% include "_hormone_card.html" %}
+
+{# 5) 受孕率 #}
+{% include "_fert_card.html" %}
+
+{# 6) 身体数据 #}
+{% include "_body_card.html" %}
+{% endblock %}

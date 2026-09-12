@@ -1,0 +1,26 @@
+# 个人数据与运行产物：绝不进入系统仓库
+data/
+uploads/
+tools/
+*.log
+*.db
+*.db-wal
+*.db-shm
+
+# Python
+.venv/
+app/.venv/
+__pycache__/
+*.pyc
+
+# 本机部署覆盖（路径、域名、端口等环境相关取值）
+deploy/config.local.sh
+
+# 脱敏自检的本地词条（含个人标识，不提交）
+scripts/desensitize-patterns.local.txt
+deploy/desensitize-allow.txt
+
+.DS_Store
+
+# 项目根目录的凭据文件（网页里配置的同步凭据）
+.env

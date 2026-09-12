@@ -1,0 +1,11 @@
+[Unit]
+Description=定时维护 @@APP_NAME@@ 问答会话上下文
+
+[Timer]
+OnBootSec=15min
+OnUnitActiveSec=1h
+Persistent=true
+Unit=@@APP_SLUG@@-maint.service
+
+[Install]
+WantedBy=timers.target

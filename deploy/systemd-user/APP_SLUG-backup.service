@@ -1,0 +1,8 @@
+[Unit]
+Description=备份 @@APP_NAME@@ 数据（用户级定时任务）
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=@@INSTALL_ROOT@@/deploy/backup.sh
+Nice=10

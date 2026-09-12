@@ -1,0 +1,764 @@
+/* 兔兔守护者 Bunny Guardian —— 移动优先样式，无外部依赖 */
+:root{
+  --bg:#faf7f8; --card:#fff; --line:#ece5e8; --ink:#2c2a2b; --muted:#7c7378;
+  --accent:#b5486a; --accent-soft:#fbebf0; --teal:#2f7d76; --amber:#a9701a;
+  --ok:#1f7a4d; --danger:#b3261e; --radius:20px; --radius-sm:14px; --pill:999px;
+  --shadow:0 1px 2px rgba(44,42,43,.04),0 8px 22px rgba(44,42,43,.055);
+  --shadow-soft:0 2px 10px rgba(181,72,106,.07);
+  /* 语义化面/字色：深色主题只覆盖这些，组件样式不用动 */
+  --card-2:#fcfafb; --code-bg:#f3eef0; --ink-2:#5c5358;
+  --head-grad:linear-gradient(180deg,#fde9f0,#fbdbe6); --head-ink:var(--head-ink); --head-line:var(--head-line);
+  --ok-bg:#e8f5ee; --warn-bg:#fdf3e3; --danger-bg:#fdecea;
+  --topbar-bg:rgba(255,255,255,.92); --tabbar-bg:rgba(253,246,249,.94);
+  /* 图表 / 日历 / 胶囊的面与线（深色下面最容易“留白”的就是这些） */
+  --chart-bg:#fdfbfc; --chart-line:#ece5e8; --chart-text:#7c7378; --chart-text-2:#a99aa2;
+  --marker-ink:#2c2a2b; --panel-bg:#fffdfe; --tag-grey:#f1eff0;
+  --day-bg:#fbfafb; --day-period:#fbe9ee; --day-fertile:#e8f5f2;
+  --chip-bg:#f7f3f5; --ring-track:#f2edf1;
+  --you-him:#e9f0ff; --you-him-line:#cddfff; --you-him-ink:#2f4a86;
+  --you-her:#fde9f0; --you-her-line:#f8d5e3; --you-her-ink:#9c2f57;
+  /* AI 思考过程（一行滚动 + 「查看全文」弹层）：弹层底色必须自己给，
+     否则 <dialog> 会用浏览器默认的纯白 —— 深色下就是一大块白 */
+  --think-line:#eddfe6; --think-ink:#8d7a84; --think-ink-2:#a7949d;
+  --accent-2:#e2517f;
+}
+/* 卡片标题栏的渐变跟着主色走：现代浏览器用 color-mix 自动算（换配色时标题栏一起变），
+   老浏览器回落到上面写死的那套粉色 */
+@supports (color: color-mix(in srgb, red, blue)){
+  :root{
+    --head-grad:linear-gradient(180deg,
+      color-mix(in srgb, var(--accent) 9%, var(--card)),
+      color-mix(in srgb, var(--accent) 19%, var(--card)));
+    --head-line:color-mix(in srgb, var(--accent) 26%, var(--card));
+    --head-ink:color-mix(in srgb, var(--accent) 62%, var(--ink));
+    --accent-soft:color-mix(in srgb, var(--accent) 14%, var(--card));
+  }
+}
+/* 深色：只改 token（用户可自选，也可跟随系统） */
+:root[data-theme="dark"]{
+  --bg:#16131a; --card:#211c24; --card-2:#272029; --line:#372e3a;
+  --ink:#ece7ea; --ink-2:#c3b8c0; --muted:#a1939c; --code-bg:#2c2531;
+  --head-grad:linear-gradient(180deg,#33222b,#3b2732); --head-ink:#f4e8ee; --head-line:#463341;
+  /* 深色下同样由 @supports 那段覆盖成按主色混合 */
+  --ok-bg:#1c3227; --warn-bg:#332a18; --danger-bg:#3a2020;
+  --topbar-bg:rgba(24,20,26,.92); --tabbar-bg:rgba(22,19,26,.94);
+  --shadow:0 1px 2px rgba(0,0,0,.35),0 10px 26px rgba(0,0,0,.4);
+  --shadow-soft:0 2px 10px rgba(0,0,0,.35);
+  --chart-bg:#1e1921; --chart-line:#3a3140; --chart-text:#a1939c; --chart-text-2:#8d8189;
+  --marker-ink:#ece7ea; --panel-bg:#261f28; --tag-grey:#2f2833;
+  --day-bg:#2a232c; --day-period:#4d2a34; --day-fertile:#24423c;
+  --chip-bg:#2e2733; --ring-track:#372f3a;
+  --you-him:#1f2b45; --you-him-line:#2f4370; --you-him-ink:#bcd0f5;
+  --you-her:#3d2430; --you-her-line:#5c3448; --you-her-ink:#f3bed3;
+  --think-line:#3b3240; --think-ink:#cbbec6; --think-ink-2:#ab9ba5;
+}
+/* 配色：只换主色；浅/深下的淡色用 color-mix 自动算（老浏览器回落到默认淡色） */
+:root[data-accent="blue"]{--accent:#3d6fb5;--accent-2:#5b93e0}
+:root[data-accent="teal"]{--accent:#2f7d76;--accent-2:#4faea1}
+:root[data-accent="purple"]{--accent:#7a4fb5;--accent-2:#a279e0}
+:root[data-accent="amber"]{--accent:#b5761a;--accent-2:#dda23f}
+:root[data-accent="ink"]{--accent:#4a5568;--accent-2:#6b7688}
+@supports (color: color-mix(in srgb, red, blue)){
+  :root[data-accent]{--accent-soft:color-mix(in srgb, var(--accent) 14%, var(--card))}
+}
+*{box-sizing:border-box}
+/* hidden 属性必须真的隐藏：作者样式里的 display 会覆盖 UA 的 [hidden]{display:none}，
+   这个坑在浮动问答面板和日历编辑条上各踩过一次，直接全局兜住 */
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB",
+       "Microsoft YaHei",system-ui,sans-serif;
+  padding-bottom:calc(64px + env(safe-area-inset-bottom));
+}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+h1,h2,h3{line-height:1.3;margin:0 0 .5em}
+h1{font-size:1.4rem}
+h2{font-size:1.12rem;margin-top:1.6em}
+h3{font-size:1rem;margin-top:1.2em}
+p{margin:.5em 0}
+small,.muted{color:var(--muted)}
+code{background:var(--code-bg);padding:.1em .35em;border-radius:5px;font-size:.9em}
+
+/* 顶栏 */
+.topbar{
+  position:sticky;top:0;z-index:30;display:flex;align-items:center;justify-content:space-between;
+  gap:8px;padding:10px 14px;background:var(--topbar-bg);backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--line);
+}
+.brand{font-weight:600;color:var(--ink);font-size:.96rem;white-space:nowrap;
+  display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:var(--pill);
+  background:var(--accent-soft);border:1px solid transparent}
+.brand:hover{text-decoration:none;filter:brightness(.97)}
+.brand:active{transform:translateY(1px)}
+.topbar .userbox{position:relative}
+.topbar summary{list-style:none;cursor:pointer;padding:6px 10px;border:1px solid var(--line);
+  border-radius:999px;font-size:.85rem;background:var(--card)}
+.topbar summary::-webkit-details-marker{display:none}
+/* 顶栏右侧：配色 + 深浅色（记在本地，可跟随系统） */
+.topctl{display:flex;align-items:center;gap:6px;margin-left:auto}
+.topctl .btnicon{border:1px solid var(--line);background:var(--card);color:var(--ink-2);
+  width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;font-size:16px;line-height:1;padding:0}
+.topctl .btnicon:active{background:var(--accent-soft);color:var(--accent)}
+.topctl details{position:relative}
+.topctl details>summary{list-style:none;cursor:pointer}
+.topctl details>summary::-webkit-details-marker{display:none}
+.swatches{position:absolute;right:0;top:116%;z-index:40;display:flex;gap:8px;padding:9px 10px;
+  background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+.sw{width:24px;height:24px;border-radius:50%;border:2px solid transparent;cursor:pointer;
+  background:var(--sw);padding:0;-webkit-tap-highlight-color:transparent}
+.sw[aria-pressed="true"]{border-color:var(--ink);box-shadow:0 0 0 2px var(--card) inset}
+/* 右上角账号：他＝蓝底，她＝粉底，身份没设就是白的 */
+.topbar .userbox.him>summary{background:var(--you-him);border-color:var(--you-him-line);color:var(--you-him-ink);font-weight:600}
+.topbar .userbox.her>summary{background:var(--you-her);border-color:var(--you-her-line);color:var(--you-her-ink);font-weight:600}
+.topbar .userbox.him>summary:hover{filter:brightness(.96)}
+.topbar .userbox.her>summary:hover{filter:brightness(.97)}
+.menu{position:absolute;right:0;top:110%;min-width:150px;background:var(--card);border:1px solid var(--line);
+  border-radius:12px;box-shadow:var(--shadow);padding:6px;display:flex;flex-direction:column}
+.menu a,.menu button{padding:9px 10px;border-radius:8px;font-size:.92rem;text-align:left}
+.menu a:hover{background:var(--accent-soft);text-decoration:none}
+.linklike{background:none;border:0;color:var(--accent);cursor:pointer;font:inherit;padding:9px 10px}
+
+/* 布局 */
+.shell{max-width:1080px;margin:0 auto;display:flex;gap:22px;padding:16px 14px 40px}
+.sidebar{display:none}
+.content{flex:1;min-width:0}
+.grid>*{min-width:0}
+.center-page{max-width:420px;margin:0 auto;padding:40px 18px}
+.tabbar{
+  position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;overflow-x:auto;
+  background:var(--tabbar-bg);backdrop-filter:blur(12px);border-top:0;
+  box-shadow:0 -1px 0 rgba(60,40,50,.045), 0 -10px 24px rgba(44,42,43,.04);
+  padding-bottom:env(safe-area-inset-bottom);
+}
+.tabbar a{
+  flex:1 1 0;min-width:64px;text-align:center;padding:11px 10px;font-size:.8rem;
+  color:var(--muted);border-top:2px solid transparent
+}
+.tabbar a{position:relative}
+.tabbar a.on{color:var(--accent);border-top-color:transparent;font-weight:600}
+.tabbar a.on::after{content:"";position:absolute;left:50%;transform:translateX(-50%);bottom:5px;
+  width:18px;height:3px;border-radius:999px;background:var(--accent)}
+@media (min-width:900px){
+  body{padding-bottom:0}
+  .tabbar{display:none}
+  .sidebar{display:flex;flex-direction:column;gap:2px;width:158px;flex:0 0 158px;
+    position:sticky;top:64px;align-self:flex-start}
+  .sidebar a{padding:9px 13px;border-radius:var(--pill);color:var(--ink);font-size:.94rem}
+  .sidebar a:hover{background:var(--card);text-decoration:none}
+  .sidebar a.on{background:var(--accent-soft);color:var(--accent);font-weight:600}
+}
+
+/* ---- 卡片标题栏：统一成受孕率卡那种粉色渐变标题栏 ----
+   只作用于卡片的第一行标题（h2/h3），内容部分照旧用卡片内边距 */
+.card > h2:first-child, .card > h3:first-child{
+  margin:-16px -16px 12px;padding:12px 16px;
+  background:var(--head-grad);
+  border-radius:calc(var(--radius) - 1px) calc(var(--radius) - 1px) 0 0;
+  border-bottom:1px solid var(--head-line);
+  font-size:1.04rem;font-weight:800;color:var(--head-ink);letter-spacing:.3px}
+
+/* 卡片 */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+  box-shadow:var(--shadow);padding:16px;margin:14px 0}
+/* 只把「正文类」第一个元素的上边距去掉。
+   注意：h2/h3:first-child 就是标题栏本身（靠 margin:-16px 出血到卡片边缘），
+   绝不能在这里置 0 —— 置了标题栏上方就会留一条白（.ring-head 与 h2 各踩过一次）。 */
+.card>p:first-child,.card>ul:first-child,.card>ol:first-child,.card>dl:first-child{margin-top:0}
+.card h2{margin-top:0}
+.grid{display:grid;gap:14px}
+@media (min-width:700px){.grid.two{grid-template-columns:1fr 1fr}.grid.three{grid-template-columns:repeat(3,1fr)}}
+.stat{display:flex;flex-direction:column;gap:2px}
+.stat .v{font-size:1.5rem;font-weight:600;line-height:1.2}
+.stat .k{font-size:.8rem;color:var(--muted)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:.94rem}
+.kv dt{color:var(--muted)}
+
+/* 徽标 */
+.tag{display:inline-block;padding:2px 9px;border-radius:999px;font-size:.76rem;
+  background:var(--accent-soft);color:var(--accent);margin:2px 4px 2px 0;white-space:nowrap}
+.tag.grey{background:var(--tag-grey);color:var(--muted)}
+.tag.ok{background:var(--ok-bg);color:var(--ok)}
+.tag.warn{background:var(--warn-bg);color:var(--amber)}
+.tag.danger{background:var(--danger-bg);color:var(--danger)}
+
+/* 阶段色 */
+.phase-menstrual{--pc:#c8455f}
+.phase-follicular{--pc:#6d8fc7}
+.phase-ovulation{--pc:#2f9e8f}
+.phase-luteal{--pc:#b58a3c}
+.phase-unknown{--pc:#9a9196}
+
+/* 表格 */
+.tablewrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -4px}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top;
+  white-space:nowrap}
+td.wrap,th.wrap{white-space:normal;min-width:180px}
+th{color:var(--muted);font-weight:600;font-size:.82rem;background:var(--card-2);position:sticky;top:0}
+
+/* 表单 */
+form.inline{display:inline}
+label{display:block;font-size:.84rem;color:var(--muted);margin:10px 0 4px}
+input,select,textarea,button{font:inherit}
+input[type=text],input[type=password],input[type=date],input[type=number],select,textarea{
+  width:100%;padding:10px 11px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--card);color:var(--ink)
+}
+textarea{min-height:76px;resize:vertical}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
+.rowform{display:grid;gap:0 12px}
+@media (min-width:700px){.rowform.c2{grid-template-columns:1fr 1fr}
+  .rowform.c3{grid-template-columns:1fr 1fr 1fr}
+  .rowform .span2{grid-column:span 2}}
+.btn{display:inline-block;padding:10px 18px;border-radius:var(--pill);border:1px solid var(--accent);
+  background:var(--accent);color:#fff;cursor:pointer;font-size:.94rem;margin-top:12px}
+.btn:hover{filter:brightness(1.05);text-decoration:none}
+.btn.ghost{background:var(--accent-soft);border-color:transparent;color:var(--accent);
+  font-weight:600}
+.btn.ghost:hover{background:var(--accent-soft);filter:brightness(.98)}
+.btn.ghost:active{background:var(--accent-soft);filter:brightness(.95)}
+.btn.danger{border-color:#e6c9c6;background:var(--card);color:var(--danger)}
+.btn.small{padding:5px 12px;font-size:.82rem;margin:0}
+.actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
+
+/* 提示 */
+.flash{padding:11px 14px;border-radius:var(--radius-sm);margin:12px 0;font-size:.9rem;border:1px solid}
+.flash.warn{background:var(--warn-bg);border-color:#f0dcb6;color:#7d5410}
+.flash.ok{background:var(--ok-bg);border-color:#c3e2d1;color:var(--ok)}
+.flash.err{background:var(--danger-bg);border-color:#f3cdc8;color:var(--danger)}
+/* 注意 :not(.dot)——小圆点会用 class="dot note"，不加这个限定会被提示框的内边距撑大 */
+.note:not(.dot){background:var(--card-2);border-left:3px solid var(--accent-soft);padding:10px 13px;border-radius:0 14px 14px 0;
+  font-size:.88rem;color:var(--ink-2);margin:12px 0}
+.disclaimer{color:var(--muted);font-size:.78rem;text-align:center;margin:26px 6px 10px;line-height:1.5}
+
+/* 日历 */
+details.card>summary{cursor:pointer;list-style:none}
+details.card>summary::-webkit-details-marker{display:none}
+details.card>summary b{font-size:.98rem}
+details.card[open]>summary{margin-bottom:10px}
+.calwrap{display:grid;gap:16px}
+@media (min-width:760px){.calwrap{grid-template-columns:1.35fr 1fr}}
+.calhead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+.calhead b{font-size:1rem}
+.calhead .btn{margin:0}
+.calgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.calgrid .dow{text-align:center;font-size:.74rem;color:var(--muted);padding:3px 0}
+.day{position:relative;min-height:44px;border-radius:9px;border:1px solid transparent;background:var(--day-bg);
+  padding:4px 5px;cursor:pointer;display:flex;flex-direction:column;gap:2px}
+.day .n{font-size:.8rem;color:var(--muted)}
+.day.out{opacity:.32}
+/* 今天：白+主色双环 + 加粗数字 + 底部「今天」小字（原来只有一条细边框，太不显眼） */
+.day.today{border-color:transparent;box-shadow:0 0 0 2px var(--card),0 0 0 3.5px var(--accent);z-index:1}
+.day.today .n{font-weight:800;color:var(--ink)}
+.day .tl{align-self:center;margin-top:auto;padding:0 4px;border-radius:6px;background:var(--accent);
+  color:#fff;font-size:9px;line-height:13px;font-weight:700;letter-spacing:.3px}
+.day.period{background:var(--day-period)}
+.day.period .n{color:var(--accent);font-weight:600}
+.day.fertile{background:var(--day-fertile)}
+.day.predicted{background:repeating-linear-gradient(45deg,var(--day-period),var(--day-period) 5px,var(--day-bg) 5px,var(--day-bg) 10px)}
+.day .dots{display:flex;gap:2px;flex-wrap:wrap}
+/* 阶段切换处留缝：色带读起来是「好几段」而不是一整片 */
+.day.pbreak{box-shadow:inset 3px 0 0 0 var(--card)}
+/* 事件式：估算排卵日把日期数字圈起来；预测经期用虚线圈（对齐 Flo/Clue 的惯例） */
+.day.ovu .n{display:inline-flex;align-items:center;justify-content:center;
+  min-width:19px;height:19px;padding:0 2px;border:2px solid #f0a851;border-radius:50%;
+  color:#8a5a17;font-weight:600;box-sizing:border-box}
+.day.est.ph-menstrual .n{border:2px dotted #ef7091;border-radius:50%;
+  display:inline-flex;align-items:center;justify-content:center;min-width:19px;height:19px;
+  padding:0 2px;color:#b5486a;box-sizing:border-box}
+.day.est{opacity:.45}                        /* 推断的日子：同色但整体变淡 */
+.day.est.ph-menstrual{opacity:.7}            /* 预测经期保留虚线圈的可见度 */
+.legend i.lg-ovu{border:2px solid #f0a851;background:none;border-radius:50%}
+.legend i.lg-pred{border:2px dotted #ef7091;background:none;border-radius:50%}
+.day.editable{cursor:pointer}
+.calgrid.editing .day{cursor:pointer;border-color:#efe6ea}
+.calgrid.editing .day:hover{border-color:var(--accent)}
+.calgrid.editing .day:active{transform:scale(.96)}
+.caledit{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:2px 0 10px;
+  padding:9px 11px;border-radius:var(--radius-sm);background:var(--accent-soft)}
+.caledit label{display:inline;margin:0;font-size:.82rem;color:var(--ink)}
+.caledit-n{display:inline-flex;align-items:center;gap:7px}
+.caledit input[type=number]{width:62px;padding:5px 8px;text-align:center;border-radius:var(--pill);
+  border:1px solid var(--line);background:var(--card)}
+.caledit-btns{display:inline-flex;gap:6px;margin-left:auto}
+.caledit-btns .btn{margin:0}
+#calEditState{font-size:.78rem}
+.legend .faded{background:linear-gradient(135deg,#ef7091,#ef7091 45%,rgba(239,112,145,.15) 55%)}
+/* 身体数据：当前情况 + 按钮；历史里才是折线图 */
+.wt-now{display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:space-between;
+  padding:10px 0 2px}
+.wt-kg{font-size:1.6rem;font-weight:700;color:var(--ink)}
+.wt-now .unit{color:var(--muted);font-size:.85rem}
+.wt-btns{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start}
+.wt-history{margin-top:10px;display:grid;gap:8px}
+.chart{display:block;width:100%;height:auto;max-width:420px;margin-left:auto;margin-right:auto;background:var(--chart-bg);
+  border:1px solid var(--line);border-radius:var(--radius-sm);padding:4px}
+details.fold>summary.btn,details.fold>summary.btn.ghost{display:inline-block;list-style:none;cursor:pointer}
+details.fold>summary::-webkit-details-marker{display:none}
+details.fold[open]>summary{margin-bottom:2px}
+/* 身体数据（BMI / 体重） */
+.bmi-now{display:flex;align-items:center;gap:14px;margin:4px 0 12px;padding:12px 14px;
+  border-radius:var(--radius-sm);background:var(--accent-soft)}
+.bmi-num{font-size:2.1rem;font-weight:700;color:var(--accent);line-height:1}
+.wtlist{display:grid;gap:4px;margin-top:6px}
+.wtlist .kvline{margin:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.wtlist .tag{font-size:.7rem;padding:1px 7px}
+.wtlist .btn{margin:0}
+/* 统计与分布 */
+.card h3{font-size:.9rem;margin:14px 0 4px}
+/* 症状表：名字完整显示，数字右对齐（数量多时配合 .pager 翻页） */
+.symptable{margin:8px 0 2px}
+.sympt{width:100%;border-collapse:collapse;font-size:.88rem}
+.sympt th,.sympt td{padding:7px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+.sympt th{font-size:.76rem;color:var(--muted);font-weight:600;white-space:nowrap}
+.sympt td.num,.sympt th.num{text-align:right;white-space:nowrap;width:62px}
+.sympt td.nm{word-break:break-word;line-height:1.5}
+.sympt tbody tr:last-child td{border-bottom:0}
+.sympt tbody tr:hover{background:var(--card-2)}
+.pager{display:flex;align-items:center;gap:10px;justify-content:center;margin:10px 0 2px}
+.pager[hidden]{display:none}
+.pager [data-pg-info]{font-size:.82rem}
+
+.dist{display:grid;gap:12px;margin-top:4px}
+@media (min-width:700px){.dist{grid-template-columns:1fr 1fr}}
+.dist-col h3{margin-top:0}
+.kvline{font-size:.84rem;margin:3px 0;line-height:1.5}
+.kvline b{color:var(--accent)}
+.bars{display:grid;gap:5px;margin:6px 0}
+.bar{display:grid;grid-template-columns:62px 1fr 26px;align-items:center;gap:8px;font-size:.8rem}
+.bar .lb{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar i{display:block;height:10px;border-radius:var(--pill);min-width:3px;
+  background:linear-gradient(90deg,var(--accent),var(--accent-2))}
+.bar b{text-align:right;font-weight:600}
+.chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+.chip{font-size:.73rem;color:var(--muted);background:var(--chip-bg);border-radius:var(--pill);padding:2px 8px}
+.chip b{color:var(--accent)}
+.dot{width:5px;height:5px;border-radius:50%;background:var(--accent)}
+.dot.mood{background:#7a6fb0}.dot.flow{background:#c8455f}.dot.pain{background:#b3261e}
+.dot.note{background:#9a9196}.dot.medication{background:#2f7d76}
+.dot.temperature{background:#b58a3c}.dot.weight{background:#6d8fc7}.dot.spotting{background:#d98ca0}
+.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:.78rem;color:var(--muted);margin-top:10px}
+.legend span{white-space:nowrap}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+
+/* Markdown 渲染 */
+.doc{font-size:.97rem;overflow-wrap:anywhere}
+.doc h1{font-size:1.3rem}
+.doc h2{font-size:1.1rem;padding-bottom:.3em;border-bottom:1px solid var(--line)}
+.doc h3{font-size:.98rem}
+.doc ul,.doc ol{padding-left:1.3em}
+.doc li{margin:.25em 0}
+.doc blockquote{margin:.8em 0;padding:8px 12px;background:var(--card-2);border-left:3px solid var(--accent-soft);
+  border-radius:0 8px 8px 0;color:var(--ink-2);font-size:.9rem}
+.doc table{font-size:.86rem}
+.doc table td,.doc table th{white-space:normal}
+.doc img{max-width:100%;height:auto}
+.doc pre{overflow-x:auto;white-space:pre-wrap}
+.doc hr{border:0;border-top:1px solid var(--line);margin:1.6em 0}
+
+/* 问答 */
+.chat{display:flex;flex-direction:column;gap:12px;margin:14px 0}
+.msg{border-radius:12px;padding:11px 14px;font-size:.94rem;max-width:100%;overflow-wrap:anywhere}
+.msg.user{background:var(--accent-soft);align-self:flex-end;max-width:88%}
+.msg.assistant{background:var(--card);border:1px solid var(--line)}
+.msg .who{font-size:.74rem;color:var(--muted);margin-bottom:4px}
+.msg pre{white-space:pre-wrap;word-break:break-word;margin:.3em 0;font:inherit}
+.chatbar{position:sticky;bottom:calc(64px + env(safe-area-inset-bottom));background:var(--bg);
+  padding:10px 0 4px;border-top:1px solid var(--line)}
+@media (min-width:900px){.chatbar{bottom:0}}
+.sesslist{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px}
+.sesslist a{flex:0 0 auto;padding:6px 11px;border:1px solid var(--line);border-radius:999px;
+  font-size:.84rem;color:var(--ink);background:var(--card);max-width:190px;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap}
+.sesslist a.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+details.fold{margin:12px 0}
+details.fold>summary:not(.btn){cursor:pointer;font-size:.9rem;color:var(--accent);padding:6px 0}
+/* 用按钮样式装的 summary 要保留按钮自己的文字颜色（否则被上面那条的 accent 色吃掉，
+   实心按钮会变成"同色文字+同色底"看不见） */
+details.fold>summary.btn{color:#fff}
+details.fold>summary.btn.ghost{color:var(--accent)}
+.empty{text-align:center;color:var(--muted);padding:26px 10px;font-size:.92rem}
+
+/* 周期环（钟表式一圈） */
+.ring-head{margin:-16px -16px 10px;padding:11px 16px 12px;display:flex;align-items:center;
+  justify-content:space-between;gap:10px;flex-wrap:wrap;
+  background:var(--head-grad);
+  border-radius:calc(var(--radius) - 1px) calc(var(--radius) - 1px) 0 0;
+  border-bottom:1px solid var(--head-line)}
+.viewtoggle{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--card)}
+.viewtoggle a{padding:6px 13px;font-size:.82rem;color:var(--muted);white-space:nowrap}
+.viewtoggle a:hover{text-decoration:none;background:var(--card-2)}
+.viewtoggle a.on{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.ringwrap{position:relative;width:100%;max-width:272px;margin:8px auto 14px}
+.ring{display:block;width:100%;height:auto}
+.ring path{transition:opacity .15s}
+.ring path:hover{opacity:1}
+.ring-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;text-align:center;gap:2px;padding:0 21%;pointer-events:none}
+/* 圆心图层整体让点击穿透到环，但「记录月经」按钮要能点 */
+.ring-center .rc-btn{pointer-events:auto}
+.rc-phase{font-size:1.06rem;font-weight:600;line-height:1.2;letter-spacing:.2px}
+.rc-day{font-size:.7rem;color:var(--muted);line-height:1.3}
+.rc-next{font-size:.68rem;color:var(--muted);line-height:1.3;margin-top:1px}
+.rc-next b{display:block;color:var(--accent);font-size:1rem;font-weight:600;letter-spacing:.2px}
+.rc-meta{text-align:center;font-size:.76rem;color:var(--muted);margin:-2px 0 12px;line-height:1.45}
+.ringkey{display:grid;gap:5px;margin-top:10px;font-size:.76rem;color:var(--muted);line-height:1.45}
+.ringkey span{display:flex;align-items:flex-start;gap:7px}
+.ringkey i{flex:0 0 auto;margin-top:3px}
+/* 排卵日图例：与环上的标记同形同色（紫色六边形），别再画成旧的「白心圆点＋薄荷绿」 */
+.ringkey .k-ovu{width:11px;height:11px;background:#8f6fd8;
+  clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%)}
+.ringlegend{display:none}
+/* 今天的圆牌：加一层投影，压在环上时位置更清楚 */
+.ring-today-badge{filter:drop-shadow(0 1.5px 3.5px rgba(60,40,50,.38))}
+
+/* AI 助手：桌面浮在右下角；手机是底部中间一颗圆按钮 → 点开就是全屏对话 */
+.fab{position:fixed;right:16px;bottom:22px;z-index:44;width:54px;height:54px;padding:0;
+  border-radius:50%;border:1px solid var(--line);
+  background:linear-gradient(180deg,var(--card),var(--card-2));box-shadow:var(--shadow);
+  line-height:1;color:var(--accent);cursor:pointer;display:flex;align-items:center;justify-content:center}
+.fab:active{transform:scale(.95)}
+.fab>span:not(.pico){display:none}          /* 圆里只放图标，名字在 title/面板标题里 */
+@media (min-width:900px){ .fab{bottom:22px} }
+/* 展开时把圆按钮收起来：收起统一用面板右上角的 × */
+.fab.open{display:none}
+/* 注意：[hidden] 的 UA 规则 display:none 会被作者样式的 display:flex 覆盖，
+   必须显式声明，否则隐藏的面板依然拦截点击（实测悬浮按钮点不动） */
+.fabpanel[hidden]{display:none}
+.fabpanel{position:fixed;z-index:41;display:flex;flex-direction:column;
+  right:10px;bottom:calc(70px + env(safe-area-inset-bottom));
+  width:min(94vw,420px);height:min(70vh,560px);
+  background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:0 12px 40px rgba(44,42,43,.18);
+  overflow:hidden}
+@media (min-width:900px){ .fabpanel{bottom:88px} }
+/* 拖小之后：变成贴着底边的一块圆角面板，上面还能看见页面 */
+.fabpanel.sheet{top:auto;border-radius:18px 18px 0 0;box-shadow:0 -8px 30px rgba(44,42,43,.18)}
+@media (max-width:899px){ .fabpanel.sheet{padding-bottom:0} }
+/* 手机：整屏对话（不留底部那一条垫，收起就用右上角的 ×） */
+@media (max-width:899px){
+  /* 手机：底部导航中间那颗圆，半截从导航栏里凸出来（用页面底色描一圈“缺口”） */
+  .fab{left:50%;right:auto;transform:translateX(-50%);width:58px;height:58px;
+    bottom:calc(18px + env(safe-area-inset-bottom));
+    box-shadow:0 4px 14px rgba(60,40,50,.18), 0 0 0 4px var(--bg)}
+  .fab:active{transform:translateX(-50%) scale(.95)}
+  .tabgap{flex:0 0 auto;width:62px;min-width:62px}
+  /* 手机上把「管理」收进右上角菜单（那里本来就有入口）：这样底栏是 4 项 + 中间空位，
+     圆按钮正好落在正中间，不会压到任何文字 */
+  .tabbar a[href="/admin"]{display:none}
+  body.fabopen{overflow:hidden}
+  .fabpanel{left:0;right:0;top:0;bottom:0;width:auto;height:auto;max-height:none;
+    border:0;border-radius:0;padding-bottom:env(safe-area-inset-bottom)}
+}
+.fabhead{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--line);background:var(--card-2)}
+.fabhead .fabl{margin-left:auto;font-size:.8rem}
+.fabhead #fabnote{margin-left:auto}
+.fabib,.fabx{border:0;background:none;line-height:1;cursor:pointer;color:var(--muted);padding:0 3px}
+.fabib{font-size:15px}
+/* 角色图标：默认是内置的小兔子 SVG，也可以换成 emoji */
+.fab .bunny{width:34px;height:34px;flex:0 0 auto}
+.fab .pico{font-size:26px;line-height:1}
+.fabhead b{display:inline-flex;align-items:center;gap:6px;margin-right:auto}
+.fabhead .bunny{width:22px;height:22px}
+.fabhead .pico{font-size:17px}
+
+/* 收起键：做成看得见的圆底按钮，手机上 46px（用户反馈还是太小按不准） */
+.fabx{font-size:22px;width:40px;height:40px;padding:0;margin:-6px -6px -6px auto;border-radius:50%;
+  background:var(--card-2);color:var(--ink-2);border:0;line-height:1;
+  display:inline-flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent}
+.fabx:active{background:var(--accent-soft);color:var(--accent)}
+/* 手机上加到 44×44：上面那条媒体查询排在基类之前，会被基类覆盖，所以这里再写一次 */
+@media (max-width:899px){
+  .fabx{width:46px;height:46px;font-size:26px;margin:-8px -8px -8px 0}
+}
+.fabbody{flex:1;overflow-y:auto;padding:10px 12px;display:flex;flex-direction:column;gap:9px}
+.fabbody .msg{font-size:.9rem;padding:9px 12px}
+.fabform{display:block;padding:0;border:0;background:none}
+/* 输入框本体：一个圆角容器，文字在上面、按钮在下面（照用户的参考图） */
+.composer{position:relative;margin:10px 10px 8px;background:var(--card);border:1px solid var(--line);
+  border-radius:24px;padding:12px 12px 8px;box-shadow:0 2px 10px rgba(60,40,50,.045)}
+.composer textarea{width:100%;border:0;outline:none;background:none;resize:none;
+  font:inherit;font-size:1rem;line-height:1.5;min-height:28px;max-height:50vh;
+  padding:2px 2px 6px;color:var(--ink);box-sizing:border-box}
+.composer textarea::placeholder{color:#b6a9af}
+.cmp-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.cmp-plus,.cmp-send{border:0;background:none;cursor:pointer;display:flex;align-items:center;
+  justify-content:center;border-radius:50%;-webkit-tap-highlight-color:transparent}
+.cmp-plus{width:38px;height:38px;color:var(--ink-2);margin-left:-4px}
+.cmp-plus svg{width:24px;height:24px}
+.cmp-plus:active{background:var(--accent-soft)}
+.cmp-plus[aria-expanded="true"]{color:var(--accent)}
+.cmp-send{width:40px;height:40px;background:var(--chip-bg);color:#a99ba1;transition:background .15s,color .15s}
+.cmp-send svg{width:22px;height:22px}
+.cmp-send.ready{background:var(--accent);color:#fff}
+.cmp-send:active{transform:scale(.96)}
+/* 输入框上方的附件预览：照片缩略图 / 文件卡片，右上角 × 删除 */
+.cmp-atts{display:flex;gap:10px;flex-wrap:wrap;padding:2px 2px 10px}
+.cmp-atts[hidden]{display:none}
+.cmp-att{position:relative;border:1px solid var(--line);background:var(--card-2);border-radius:12px;
+  display:flex;align-items:center;gap:8px;-webkit-tap-highlight-color:transparent}
+.cmp-att.pic{width:68px;height:68px;padding:0;overflow:hidden;cursor:zoom-in}
+.cmp-att.pic img{width:100%;height:100%;object-fit:cover;display:block}
+.cmp-att.doc{padding:8px 36px 8px 10px;max-width:100%;color:var(--ink-2)}
+.cmp-att .ic{font-size:20px;flex:0 0 auto}
+.cmp-att .nm{display:block;max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.82rem}
+.cmp-att .ty{font-size:.72rem;color:var(--muted)}
+.cmp-att .del{position:absolute;top:-7px;right:-7px;width:26px;height:26px;border-radius:50%;
+  border:1px solid var(--line);background:var(--card);color:#8b7d84;cursor:pointer;line-height:1;
+  display:flex;align-items:center;justify-content:center;font-size:15px;
+  box-shadow:0 1px 3px rgba(60,40,50,.12);-webkit-tap-highlight-color:transparent}
+.cmp-att .del:active{background:var(--accent-soft);color:var(--accent);border-color:#f2c6d8}
+@media (max-width:899px){ .cmp-att .del{width:30px;height:30px;font-size:17px} }
+/* 点图片看大图 */
+.picdlg{border:0;background:transparent;padding:0;max-width:94vw}
+.picdlg img{max-width:92vw;max-height:76vh;border-radius:14px;display:block;background:var(--card)}
+.picdlg form{margin-top:10px;text-align:center}
+.picdlg::backdrop{background:rgba(30,22,26,.74)}
+
+/* ＋ 展开的附件面板：照片 / 拍摄 / 文件 */
+.cmp-sheet{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;
+  padding:12px 12px calc(12px + env(safe-area-inset-bottom));border-top:1px solid var(--line);
+  background:var(--card-2)}
+.cmp-sheet[hidden]{display:none}
+.cmp-tile{border:1px solid var(--line);background:var(--card);border-radius:18px;padding:14px 6px 10px;
+  display:flex;flex-direction:column;align-items:center;gap:8px;font-size:.8rem;color:var(--ink-2);
+  cursor:pointer;-webkit-tap-highlight-color:transparent}
+.cmp-tile svg{width:26px;height:26px}
+.cmp-tile:active{background:var(--accent-soft);border-color:#f2c6d8}
+
+.fabtyping{color:var(--muted);font-size:.8rem;padding-left:2px}
+/* 问答正文的 Markdown 排版（服务端已白名单清洗） */
+.fabbody .md{line-height:1.55}
+.fabbody .md>.md-first{margin-top:0}
+.fabbody .md p{margin:.45em 0}
+.fabbody .md ul,.fabbody .md ol{margin:.45em 0 .45em 1.05em;padding:0}
+.fabbody .md li{margin:.15em 0}
+.fabbody .md h1,.fabbody .md h2,.fabbody .md h3,.fabbody .md h4{font-size:.95rem;margin:.6em 0 .25em}
+.fabbody .md code{background:var(--code-bg);border-radius:6px;padding:1px 5px;font-size:.88em}
+.fabbody .md pre{background:var(--card-2);border-radius:10px;padding:8px 10px;overflow:auto;margin:.5em 0}
+.fabbody .md pre code{background:none;padding:0}
+.fabbody .md blockquote{margin:.5em 0;padding:2px 0 2px 9px;border-left:3px solid var(--accent-soft);color:var(--muted)}
+.fabbody .md table{width:100%;border-collapse:collapse;font-size:.82rem;margin:.5em 0}
+.fabbody .md th,.fabbody .md td{border:1px solid var(--line);padding:3px 6px;text-align:left}
+.fabbody .md a{word-break:break-all}
+.fabbody .msg.streaming .md{white-space:pre-wrap}
+.fabbody .src{font-size:.72rem;color:var(--muted);margin-top:6px;padding-top:5px;border-top:1px dashed var(--line)}
+/* 断开/失败气泡里的重试按钮（只在出错的气泡里出现） */
+.fabbody .retrybtn{margin-top:9px;display:inline-flex;align-self:flex-start}
+.fabbody .msg.errored .md{color:var(--danger)}
+.fabctx{font-size:.72rem;color:var(--muted);padding:6px 12px;background:var(--card-2);border-top:1px solid var(--line)}
+
+/* ---- 待确认的写入提案（问答面板内） ---- */
+.fabpend{max-height:32vh;overflow:auto;background:var(--card-2);border-top:1px solid var(--line);padding:8px 10px}
+.fpend-t{font-size:.76rem;color:var(--accent);font-weight:700;margin-bottom:6px}
+.fpend{border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--card);padding:7px 9px;
+  margin-bottom:7px;font-size:.82rem;line-height:1.5}
+.fp-kind{display:inline-block;font-size:.7rem;color:var(--muted);border:1px solid var(--line);
+  border-radius:var(--pill);padding:0 6px;margin-bottom:3px}
+.fp-k{color:var(--muted)}
+.fp-r{font-size:.74rem;color:var(--muted);margin-top:3px}
+.fp-b{display:flex;gap:6px;margin-top:7px}
+.fpend-msg{font-size:.76rem;color:var(--teal);margin-bottom:6px;font-weight:600}
+.fabfile-name{font-size:.72rem;color:var(--muted);padding:0 12px 6px;background:var(--card-2)}
+.fp-miss{font-size:.74rem;color:var(--muted);margin-top:3px}
+
+/* 输入框左上角那个小抓手：按住上下拖 = 输入框长高 / 拖到底再拖就缩面板 */
+.cmp-handle{position:absolute;top:-11px;left:16px;width:48px;height:22px;border-radius:999px;
+  background:var(--card);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;
+  cursor:ns-resize;touch-action:none;user-select:none;-webkit-user-select:none;
+  box-shadow:0 1px 2px rgba(60,40,50,.06)}
+.cmp-handle span{width:20px;height:3px;border-radius:999px;background:var(--line);transition:background .15s}
+.cmp-handle:active span,.cmp-handle.dragging span{background:var(--accent)}
+/* 聊天框上方的功能键：做成手指能稳稳按到的圆角块 */
+.fabtools{display:flex;align-items:center;gap:6px;padding:7px 10px;flex-wrap:wrap;
+  border-bottom:1px solid var(--line);background:var(--card-2)}
+.fabtb{border:1px solid var(--line);background:var(--card);color:var(--ink-2);border-radius:12px;
+  min-height:34px;padding:6px 12px;font-size:.8rem;line-height:1.2;cursor:pointer;
+  display:inline-flex;align-items:center;gap:4px;
+  transition:background .15s,border-color .15s}
+.fabtb:hover{border-color:#f2c6d8;color:var(--accent);background:var(--card)}
+.fabtb:active{background:var(--accent-soft)}
+.fabtb[disabled]{opacity:.45;cursor:default}
+.fabhint{font-size:.72rem;color:var(--muted);margin-left:auto}
+/* 思考过程：一行一直往后滑，点「查看」看全文 */
+.think{display:flex;align-items:center;gap:6px;margin:0 0 6px;padding:3px 7px;
+  border:1px dashed var(--think-line);background:var(--card-2);border-radius:10px}
+.thinkline{flex:1;min-width:0;white-space:nowrap;overflow:hidden;font-size:.76rem;color:var(--think-ink);
+  -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 18px);
+  mask-image:linear-gradient(90deg,transparent 0,#000 18px)}
+.think.done .thinkline{color:var(--think-ink-2)}
+.thinkmore{border:0;background:none;color:var(--accent);font-size:.72rem;cursor:pointer;
+  flex:0 0 auto;padding:0 2px}
+/* 底色/字色必须显式给：<dialog> 不给背景就是浏览器默认纯白，深色下会炸一块白 */
+.thinkdlg{border:1px solid var(--line);border-radius:16px;max-width:min(92vw,560px);
+  background:var(--card);color:var(--ink);
+  box-shadow:0 18px 50px rgba(44,42,43,.25);padding:14px 16px}
+.thinkdlg::backdrop{background:rgba(40,30,35,.35)}
+.thinkdlg h3{margin:0 0 8px;font-size:.95rem}
+.thinkdlg pre{margin:0 0 10px;white-space:pre-wrap;word-break:break-word;max-height:56vh;
+  overflow:auto;font-size:.82rem;line-height:1.55;color:var(--ink-2)}
+@media (max-width:899px){
+  .thinkdlg{width:92vw}
+  .fabtb{min-height:40px;font-size:.84rem;padding:8px 13px}
+  .cmp-plus{width:42px;height:42px}
+  .cmp-send{width:44px;height:44px}
+  .composer{margin:10px 10px 8px;padding:12px 12px 8px;border-radius:26px}
+  .composer textarea{font-size:1.02rem}
+  .thinkmore{min-height:30px;padding:0 8px}
+}
+
+/* ---- 周期环：圆心倒计时 + 今天日期牌 + 排卵日六边形 ---- */
+.rc-count-label{font-size:.78rem;color:var(--muted);margin-bottom:1px}
+.rc-count{font-size:1.9rem;font-weight:700;color:var(--ink);line-height:1.1}
+.rc-count small{font-size:.85rem;font-weight:600;margin-left:2px;color:var(--muted)}
+.rc-btn{margin-top:9px}
+
+/* ---- 可点图例（环下方） ---- */
+.lgrow{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px;margin:12px 0 4px}
+.lgchip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--card);
+  border-radius:var(--pill);padding:5px 11px;font-size:.8rem;color:var(--ink);cursor:pointer;
+  font-family:inherit;line-height:1.2}
+.lgchip:hover{border-color:var(--accent);background:var(--panel-bg)}
+.lgchip .dt{width:10px;height:10px;border-radius:50%;display:inline-block;flex:0 0 auto}
+.lgchip .hx{width:11px;height:11px;display:inline-block;flex:0 0 auto;
+  clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%)}
+
+/* ---- 阶段说明弹层 ---- */
+.phasedlg{border:none;border-radius:var(--radius);padding:0;max-width:560px;width:calc(100% - 26px);
+  box-shadow:0 18px 50px rgba(80,50,65,.22);color:var(--ink);background:var(--card)}
+.phasedlg::backdrop{background:rgba(60,40,50,.35)}
+.dlghead{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:12px 14px;border-bottom:1px solid var(--line)}
+.dlgx{border:none;background:none;font-size:1.3rem;line-height:1;cursor:pointer;color:var(--muted);padding:0 2px}
+.dlgbody{padding:12px 14px 16px;max-height:70vh;overflow:auto}
+.dlgbody h4{margin:12px 0 3px;font-size:.86rem;color:var(--accent)}
+.dlgbody h4:first-of-type{margin-top:6px}
+.dlgbody p{margin:0;font-size:.88rem;line-height:1.65}
+.dlgbody ul{margin:4px 0 0 1.05em;padding:0;font-size:.88rem;line-height:1.65}
+.dlgbody .dlgtag{font-weight:600;color:var(--ink)}
+.dlgbody .dlgsrc{margin-top:12px;padding-top:8px;border-top:1px dashed var(--line);
+  font-size:.74rem;color:var(--muted);line-height:1.7}
+
+/* ---- 受孕率卡 ---- */
+.fertcard .fert-top{display:flex;align-items:center;gap:14px;margin-bottom:6px}
+.fert-num{font-size:2rem;font-weight:700;color:var(--accent);line-height:1}
+.fert-num small{font-size:.9rem}
+
+/* ---- 病历时间轴（疾病事件 + 就医合并） ---- */
+.recbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;justify-content:space-between}
+.recspan{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.recspan input[type=date]{flex:1 1 118px;min-width:0;width:auto;padding:4px 6px;border:1px solid var(--line);
+  border-radius:var(--radius-sm);font-size:.8rem;font-family:inherit;color:var(--ink);background:var(--card)}
+.timeline{display:grid;gap:10px;margin-top:12px}
+.tle{display:grid;grid-template-columns:76px 1fr;gap:10px}
+.tle-date{font-size:.76rem;color:var(--muted);font-weight:600;padding-top:10px;white-space:nowrap}
+.tle-body{background:var(--card);border:1px solid var(--line);border-radius:var(--radius-sm);padding:9px 11px;
+  box-shadow:0 1px 2px rgba(80,50,65,.05)}
+.tle-visit .tle-body{border-left:3px solid var(--teal)}
+.tle-event .tle-body{border-left:3px solid var(--accent)}
+.tle-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.tle-link{margin-left:auto;font-size:.78rem;color:var(--accent);white-space:nowrap}
+.tle-del{margin-top:6px}
+.tle-log .tle-date{color:#8a7f86}
+.tle-log .tle-body{background:var(--panel-bg)}
+.timeline-mini .tle-body{padding:8px 10px}
+.timeline-mini .tle{gap:8px}
+@media (max-width:420px){ .tle{grid-template-columns:60px 1fr} .tle-date{font-size:.72rem} }
+
+/* ---- 受孕率卡：渐变标题栏 + 内嵌浅色面板（版式参照主流经期 App） ---- */
+.chart-panel{margin:6px auto 0;padding:12px 10px 6px;background:var(--panel-bg);border-radius:18px;
+  max-width:560px;box-shadow:0 1px 3px rgba(150,110,130,.10)}
+.chart-panel .chart{max-width:460px;background:transparent;box-shadow:none;margin:0 auto}
+.fert-panel{margin:0 auto;padding:12px 10px 6px;background:var(--panel-bg);border-radius:18px;
+  max-width:560px;box-shadow:0 1px 3px rgba(150,110,130,.10)}
+.fert-panel .chart{max-width:460px;background:transparent;box-shadow:none;margin:0 auto}
+.fert-legend{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin:10px 0 6px;
+  font-size:.78rem;color:#7c6a72}
+.fert-legend span{display:inline-flex;align-items:center;gap:5px}
+.fert-legend i{width:10px;height:10px;border-radius:50%;display:inline-block;flex:0 0 auto}
+.fert-legend i.penta{clip-path:polygon(50% 0,100% 38%,82% 100%,18% 100%,0 38%)}
+.fert-info{padding:12px 0 0;font-size:.86rem;line-height:1.55}
+.fert-info b{font-size:1.06rem;color:var(--accent)}
+.fertcard .note{margin:8px 0 0}
+
+/* ---- 身体数据：身高单独一行 + BMI 刻度条 ---- */
+.height-now{font-size:.86rem;margin:2px 0 9px;color:var(--ink);line-height:1.5}
+.height-now b{font-size:.95rem}
+/* BMI 数字块与刻度条：宽屏并排，窄屏自动换行；刻度必须限宽，
+   否则桌面宽屏（卡片 1400+px）会把它拉大好几倍，指针与数字都变巨型 */
+.height-now{font-size:.88rem;color:var(--ink-2);margin:2px 0 10px;line-height:1.7}
+.height-now summary{list-style:none;cursor:pointer;display:inline-flex;align-items:baseline;gap:6px}
+.height-now summary::-webkit-details-marker{display:none}
+.height-now .num{font-weight:700;font-size:1.06rem;color:var(--accent);padding:0 2px;
+  border-bottom:2px dotted var(--accent-soft)}
+.height-now summary:hover .num{background:var(--accent-soft);border-radius:4px}
+.height-now .edit{font-size:.72rem;color:var(--accent);border:1px solid var(--accent-soft);
+  border-radius:var(--pill);padding:1px 7px;background:var(--accent-soft)}
+.bmi-row{display:flex;align-items:center;gap:20px;flex-wrap:wrap;max-width:760px}
+.bmi-row .bmi-now{flex:1 1 300px;margin-bottom:0}
+.bmi-gauge{flex:0 1 360px;min-width:236px;margin:0}
+.bmi-gauge svg{display:block;width:100%;max-width:360px;height:auto;margin:0 auto}
+
+/* ============ 动效（只做 transform/opacity，短时长；系统开了「减少动态效果」就全部关掉） ============ */
+@keyframes bgFadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@keyframes bgPanelIn{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
+@keyframes bgChipIn{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:none}}
+@keyframes bgDropIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+@keyframes bgDotIn{from{opacity:0;transform:translateX(-50%) scale(.4)}to{opacity:1;transform:translateX(-50%) scale(1)}}
+@keyframes bgPulse{0%{box-shadow:0 0 0 0 var(--accent-soft)}100%{box-shadow:0 0 0 8px transparent}}
+
+@media (prefers-reduced-motion: no-preference){
+  html{scroll-behavior:smooth}
+  /* 页面主体轻微上浮淡入（每次导航一次，不逐卡错峰，避免晃眼） */
+  .content{animation:bgFadeUp .22s ease-out both}
+  .tabbar a,.sidebar a,.btn,.btnicon,.fabtile,.cmp-tile,.fabtb,.card a.btn{
+    transition:transform .12s ease,background-color .16s ease,border-color .16s ease,color .16s ease}
+  .btn:active,.card a.btn:active,.cmp-tile:active,.fabtb:active{transform:translateY(1px) scale(.985)}
+  /* 悬浮问答面板：出现时淡入上浮；片段就地更新时也走同一套 */
+  .fabpanel:not([hidden]){animation:bgPanelIn .18s ease-out both}
+  .fabbody .msg{animation:bgFadeUp .18s ease-out both}
+  /* 待确认卡片、附件、图例、提示条 */
+  .fabpend .fpend,.cmp-att{animation:bgChipIn .16s ease-out both}
+  .flash{animation:bgDropIn .2s ease-out both}
+  .swatches{animation:bgDropIn .14s ease-out both}
+  .tabbar a.on::after{animation:bgDotIn .18s ease-out both}
+  /* 打勾/记录后更新的卡片给一点点反馈（不改变布局） */
+  .card.blk-updated{animation:bgPulse .5s ease-out}
+  /* 鼠标设备上卡片轻微抬起 */
+  @media (hover:hover){ .card{transition:box-shadow .18s ease,transform .18s ease}
+    .card:hover{box-shadow:var(--shadow)} }
+}
+@media (prefers-reduced-motion: reduce){
+  *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+}
+/* 手机上的输入控件字号≥16px：iOS Safari 小于 16px 会在聚焦时自动放大整页 */
+@media (max-width:899px){
+  input,select,textarea{font-size:16px}
+  /* 手指够得到：小按钮/图例/视角切换统一抬到 38px */
+  .btn.small,.btn.ghost.small,.viewtoggle a,.lgchip{min-height:38px;display:inline-flex;
+    align-items:center;padding-top:7px;padding-bottom:7px}
+  .day .n{min-height:22px}
+  /* 复选框和下拉框也要够大 */
+  input[type="checkbox"],input[type="radio"]{width:20px;height:20px;min-height:20px}
+  select,input[type="date"],input[type="number"]{min-height:38px}
+  .tle-link,.src{display:inline-block;padding:4px 0}
+  .sw{width:34px;height:34px}
+  /* 弹层的定位父级改成顶栏，这样左右都能贴边，不会跑到屏幕外 */
+  .topctl details{position:static}
+  .swatches{gap:10px;padding:10px 12px;left:8px;right:8px;top:100%;max-width:none;
+    justify-content:center}
+  .topbar .brand{min-height:34px;display:inline-flex;align-items:center}
+}
+
+/* ============ 临近经期的提问弹窗 ============ */
+.perioddlg{border:0;border-radius:20px;padding:20px 18px 16px;max-width:min(92vw,340px);
+  text-align:center;background:var(--card);color:var(--ink);box-shadow:0 18px 50px rgba(40,30,35,.28)}
+.perioddlg::backdrop{background:rgba(40,30,35,.45)}
+.perioddlg .pd-emoji{font-size:34px;line-height:1}
+.perioddlg h3{margin:6px 0 4px;font-size:1.06rem}
+.perioddlg .pd-note{font-size:.84rem;margin:2px 0 14px}
+.perioddlg .pd-btns{display:flex;gap:10px;justify-content:center}
+.perioddlg .pd-btns .btn{min-width:104px;justify-content:center;margin:0}
+.perioddlg .pd-hint{font-size:.72rem;margin:12px 0 0;line-height:1.5}

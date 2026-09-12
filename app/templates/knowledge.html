@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>知识库</h1>
+
+<form method="get" action="/knowledge" class="rowform">
+  <div>
+    <label for="q">检索（按关键词在全部可见文档中匹配）</label>
+    <input id="q" type="text" name="q" value="{{ q }}" placeholder="如 月经过多 / 排卵 / 痛经 / 性激素">
+  </div>
+  <div><button class="btn" type="submit">检索</button></div>
+</form>
+
+{% if q %}
+<div class="card">
+  <h2>检索结果：{{ q }}</h2>
+  {% if results %}
+    {% for r in results %}
+    <div style="margin-bottom:14px">
+      <a href="/knowledge?path={{ r.rel }}"><b>{{ r.title }}</b> — {{ r.section }}</a>
+      <div class="muted" style="font-size:.85rem">docs/{{ r.rel }}</div>
+      <div style="font-size:.9rem">{{ r.snippet|striptags }}…</div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty">没有匹配内容。可换用更短的关键词，例如「痛经」。若知识库尚未收录该主题，请补充文档。</div>
+  {% endif %}
+</div>
+{% endif %}
+
+{% for dir in dirs %}
+  {% set items = docs | selectattr("dir", "equalto", dir) | list %}
+  <div class="card">
+    <h2>{{ dir }}<span class="tag grey" style="margin-left:8px">{{ items|length }} 篇</span></h2>
+    {% if items %}
+      <div class="tablewrap">
+        <table>
+          <tr><th class="wrap">文档</th><th>更新</th><th>状态</th></tr>
+          {% for it in items %}
+          <tr>
+            <td class="wrap">
+              <a href="/knowledge?path={{ it.rel }}">{{ it.title }}</a>
+              {% if it.scope == "general" %}<span class="tag grey" style="margin-left:6px">通用</span>{% endif %}
+              {% if it.source %}<div class="muted" style="font-size:.8rem">来源：{{ it.source }}</div>{% endif %}
+            </td>
+            <td>{{ it.updated or it.mtime }}</td>
+            <td>{% if it.placeholder %}<span class="tag grey">待补充</span>{% else %}<span class="tag ok">已收录</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </table>
+      </div>
+    {% else %}<div class="empty">该分类下暂无文档</div>{% endif %}
+  </div>
+{% endfor %}
+
+<div class="note">
+  医学知识文档均标注来源，可在正文中看到 <code>[来源: URL]</code> 形式的引用；统计推断与「待核实」内容会明确标注。
+  标「通用」的文档来自本机通用知识目录 <code>{{ kb.general_dir }}</code>（随软件分发、不进数据仓库，删了重装即可恢复）；
+  其余为个人文档。新增主题：通用知识补进软件仓 <code>knowledge/general/</code>，个人内容写进数据仓库并更新 <code>docs/INDEX.md</code>。
+</div>
+{% endblock %}

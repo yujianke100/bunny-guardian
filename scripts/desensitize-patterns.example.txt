@@ -1,0 +1,12 @@
+# 脱敏自检的「个人词条」（复制为 desensitize-patterns.local.txt，已 gitignore，不进仓库）
+#
+# 每行一个正则片段（ERE 语法），# 之后是注释。
+# 建议覆盖：姓名/昵称、账号名、域名、固定 IP、集群或内部项目名、站点专属模型路径。
+#
+# 示例：
+# 张三|李四
+# my-name|myusername
+# example\.com
+# 10\.0\.0\.1|100\.64\.0\.7
+# my-cluster|internal-project
+# /data/models/

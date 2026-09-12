@@ -1,0 +1,108 @@
+<div class="card" id="blk-body">
+  <h2>⚖️ 身体数据</h2>
+  {% if body.bmi %}
+  <div class="bmi-row">
+    <div class="bmi-now">
+      <div class="bmi-num">{{ body.bmi }}</div>
+      <div>
+        <span class="tag {{ body.cls.tag }}">{{ body.cls.label }}</span>
+        <div class="muted" style="font-size:.78rem">BMI＝体重÷身高²，按 {{ body.latest.kg }} kg 与 {{ body.height_cm }} cm 算出</div>
+      </div>
+    </div>
+    {% if body.gauge %}<div class="bmi-gauge">{{ body.gauge|safe }}</div>{% endif %}
+  </div>
+  {% if body.gauge %}
+  <div class="muted" style="font-size:.72rem;margin:4px 0 10px">
+    刻度按中国标准：&lt;18.5 体重过低 · 18.5–24 正常 · 24–28 超重 · ≥28 肥胖
+  </div>
+  {% endif %}
+  {% endif %}
+
+  {# 身高单独显示：设完身高就能确认「已记录」，不必等记了体重才发现 #}
+  {# 身高数字本身就是按钮：点一下就地改（原来下面还挂着一个「身高设置」，已去掉） #}
+  {% if body.height_cm %}
+  <div class="height-now">
+    <details class="fold">
+      <summary>当前身高 <b class="num">{{ body.height_cm }}</b> cm<span class="edit">改</span></summary>
+      <form method="post" action="/body/height" class="rowform" style="margin-top:10px">
+        <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+        <label for="hc">身高（厘米）</label>
+        <input id="hc" type="number" step="0.1" min="100" max="220" name="height_cm"
+               value="{{ body.height_cm or '' }}" placeholder="如 162">
+        <div><button class="btn small" type="submit">保存身高</button></div>
+      </form>
+    </details>
+    {% if body.healthy %} · BMI 正常范围对应体重约 <b>{{ body.healthy[0] }}–{{ body.healthy[1] }}</b> kg{% endif %}
+  </div>
+  {% endif %}
+
+  {% if not body.height_cm %}
+  <div class="height-now">
+    <details class="fold">
+      <summary>还没有设置身高<span class="edit">设置</span></summary>
+      <form method="post" action="/body/height" class="rowform" style="margin-top:10px">
+        <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+        <label for="hc2">身高（厘米）</label>
+        <input id="hc2" type="number" step="0.1" min="100" max="220" name="height_cm" placeholder="如 162">
+        <div><button class="btn small" type="submit">保存身高</button></div>
+      </form>
+    </details>
+    <span class="muted" style="font-size:.78rem">设置后每次记体重都会自动算出 BMI 与所在区间。</span>
+  </div>
+  {% endif %}
+
+  <div class="wt-now">
+    <div>
+      {% if body.latest %}
+      <span class="wt-kg">{{ body.latest.kg }}</span> <span class="unit">kg</span>
+      <div class="muted" style="font-size:.76rem">最近记录于 {{ body.latest.date }}{% if body.count > 1 %} · 共 {{ body.count }} 次{% endif %}</div>
+      {% else %}
+      <span class="muted">还没有体重记录</span>
+      {% endif %}
+    </div>
+    <div class="wt-btns">
+      <details class="fold">
+        <summary class="btn small">更新体重</summary>
+        <form method="post" action="/body/weight" class="rowform" style="margin-top:10px">
+          <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+          <label for="wk">体重（公斤）</label>
+          <input id="wk" type="number" step="0.1" min="25" max="200" name="weight_kg" required placeholder="如 52.4">
+          <label for="wd">日期</label>
+          <input id="wd" type="date" name="log_date" value="{{ today }}">
+          <div><button class="btn small" type="submit">保存</button></div>
+        </form>
+      </details>
+      {% if body.count > 1 %}
+      <details class="fold">
+        <summary class="btn ghost small">历史</summary>
+        <div class="wt-history">
+          {% if body.chart %}{{ body.chart|safe }}{% endif %}
+          {% if body.first %}
+          <div class="muted" style="font-size:.76rem">
+            从 {{ body.first[1] }} kg（{{ body.first[0][5:] }}）到 {{ body.latest.kg }} kg（{{ body.latest.date[5:] }}）：
+            共 {{ (body.latest.kg - body.first[1]) | round(1) }} kg
+          </div>
+          {% endif %}
+          <div class="wtlist">
+            {% for w in body.weights %}
+            <div class="kvline">
+              {{ w.date }}　<b>{{ w.kg }}</b> kg
+              {% if w.bmi %}　BMI {{ w.bmi }} <span class="tag {{ w.cls_tag }}">{{ w.cls }}</span>{% endif %}
+              {% if w.delta is not none %}<span class="muted">较上次 {{ '+' if w.delta > 0 else '' }}{{ w.delta }} kg</span>{% endif %}
+              <form class="inline" method="post" action="/cycle/log/delete/{{ w.id }}" data-confirm="删除这条体重记录？">
+                <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+                <button class="btn danger small" type="submit">删除</button>
+              </form>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </details>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="note">{{ body.note }}
+    <a href="{{ body.source_url }}" target="_blank" rel="noopener">来源：{{ body.source_title }}</a>
+  </div>
+</div>

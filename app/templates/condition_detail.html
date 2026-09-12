@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block content %}
+<p><a class="btn ghost small" href="/conditions">← 返回疾病档案</a></p>
+<h1>{{ c.name }}</h1>
+<p>
+  <span class="tag {{ 'warn' if c.status == 'active' else ('ok' if c.status == 'resolved' else 'grey') }}">{{ status_cn.get(c.status, c.status) }}</span>
+  {% if c.category %}<span class="tag grey">{{ c.category }}</span>{% endif %}
+</p>
+
+<div class="card">
+  <dl class="kv">
+    <dt>起病时间</dt><dd>{{ c.onset_date or "—" }}</dd>
+    <dt>确诊时间</dt><dd>{{ c.diagnosed_date or "—" }}</dd>
+    <dt>医院/科室</dt><dd>{{ c.hospital or "—" }}{% if c.department %} · {{ c.department }}{% endif %}</dd>
+    <dt>医师</dt><dd>{{ c.doctor or "—" }}</dd>
+    <dt>创建</dt><dd>{{ c.created_at }}</dd>
+  </dl>
+  <h3>概述</h3>
+  <p>{{ c.summary or "（暂无）" }}</p>
+</div>
+
+{% if can_edit %}
+<details class="fold">
+  <summary>＋ 添加病程事件（就诊 / 检查 / 用药 / 症状变化）</summary>
+  <div class="card">
+    <form method="post" action="/conditions/{{ c.id }}/event" class="rowform c3">
+      <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+      <div><label for="ed">日期 *</label><input id="ed" type="date" name="event_date" required value="{{ today }}"></div>
+      <div><label for="ek">类型</label>
+        <select id="ek" name="kind">
+          <option value="visit">就诊</option><option value="exam">检查</option>
+          <option value="medication">用药</option><option value="surgery">手术</option>
+          <option value="symptom">症状变化</option><option value="note">备注</option>
+        </select>
+      </div>
+      <div><label for="et">标题</label><input id="et" type="text" name="title" placeholder="如 性激素六项 / 妇科超声"></div>
+      <div class="span2"><label for="edd">详情</label><textarea id="edd" name="detail" placeholder="检查项目、用药方案、症状描述…"></textarea></div>
+      <div><label for="er">结果 / 结论</label><textarea id="er" name="result" placeholder="报告结论、医生意见…"></textarea></div>
+      <div class="span2"><button class="btn" type="submit">保存事件</button></div>
+    </form>
+  </div>
+</details>
+
+<details class="fold">
+  <summary>＋ 上传检查单 / 报告照片（jpg、png、pdf，≤12MB）</summary>
+  <div class="card">
+    <form method="post" action="/upload/condition/{{ c.id }}" enctype="multipart/form-data" class="rowform">
+      <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+      <input type="hidden" name="back" value="/conditions/{{ c.id }}">
+      <div><label for="fi">选择文件</label><input id="fi" type="file" name="file" required
+        accept="image/jpeg,image/png,image/webp,application/pdf"></div>
+      <div><button class="btn" type="submit">上传</button></div>
+    </form>
+    <div class="note">附件保存在服务器本地，仅登录用户可下载（不进入 git 仓库，避免病历照片被推送到远端）。</div>
+  </div>
+</details>
+
+<details class="fold">
+  <summary>✎ 修改本条档案</summary>
+  <div class="card">
+    <form method="post" action="/conditions/{{ c.id }}/update" class="rowform c3">
+      <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+      <div><label for="st2">状态</label>
+        <select id="st2" name="status">
+          {% for k, v in status_cn.items() %}<option value="{{ k }}" {{ 'selected' if c.status == k else '' }}>{{ v }}</option>{% endfor %}
+        </select>
+      </div>
+      <div><label for="cat2">分类</label><input id="cat2" type="text" name="category" value="{{ c.category or '' }}"></div>
+      <div><label for="dd2">确诊时间</label><input id="dd2" type="date" name="diagnosed_date" value="{{ c.diagnosed_date or '' }}"></div>
+      <div><label for="h2">医院</label><input id="h2" type="text" name="hospital" value="{{ c.hospital or '' }}"></div>
+      <div><label for="dep2">科室</label><input id="dep2" type="text" name="department" value="{{ c.department or '' }}"></div>
+      <div><label for="doc2">医师</label><input id="doc2" type="text" name="doctor" value="{{ c.doctor or '' }}"></div>
+      <div class="span2"><label for="su2">概述</label><textarea id="su2" name="summary">{{ c.summary or '' }}</textarea></div>
+      <div class="span2"><button class="btn" type="submit">保存修改</button></div>
+    </form>
+    <form method="post" action="/conditions/{{ c.id }}/delete" data-confirm="删除该疾病档案及其全部病程事件？此操作不可恢复。">
+      <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+      <button class="btn danger" type="submit">删除该档案</button>
+    </form>
+  </div>
+</details>
+{% endif %}
+
+<div class="card">
+  <h2>病程时间线（{{ events|length }}）</h2>
+  {% if events %}
+    {% for e in events %}
+    <div style="border-left:2px solid var(--accent-soft);padding:2px 0 10px 12px;margin-bottom:8px">
+      <div><b>{{ e.event_date }}</b>
+        <span class="tag grey">{{ event_cn.get(e.kind, e.kind) }}</span>
+        {% if e.title %}<span style="font-weight:600">{{ e.title }}</span>{% endif %}
+      </div>
+      {% if e.detail %}<div style="font-size:.92rem">{{ e.detail }}</div>{% endif %}
+      {% if e.result %}<div style="font-size:.92rem" class="muted">结论：{{ e.result }}</div>{% endif %}
+      {% set ev_files = files_by_event.get(e.id, []) %}
+      {% if ev_files %}
+      <div style="margin:6px 0;display:flex;flex-wrap:wrap;gap:8px">
+        {% for f in ev_files %}
+        <a href="/attachment/{{ f.id }}" target="_blank" rel="noopener" title="{{ f.filename }}">
+          {% if f.mime.startswith("image/") %}
+          <img src="/attachment/{{ f.id }}" alt="{{ f.filename }}"
+               style="max-width:120px;max-height:90px;border-radius:8px;border:1px solid var(--line)">
+          {% else %}<span class="tag grey">📄 {{ f.filename }}</span>{% endif %}
+        </a>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% if can_edit %}
+      <details class="fold" style="margin:4px 0">
+        <summary>📎 给这条事件附病历单/照片</summary>
+        <form method="post" action="/upload/event/{{ e.id }}" enctype="multipart/form-data" class="rowform">
+          <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+          <input type="hidden" name="back" value="/conditions/{{ c.id }}">
+          <div><input type="file" name="file" required accept="image/jpeg,image/png,image/webp,application/pdf"></div>
+          <div><button class="btn small" type="submit">上传</button></div>
+        </form>
+      </details>
+      <form class="inline" method="post" action="/conditions/{{ c.id }}/event/{{ e.id }}/delete" data-confirm="删除该事件？">
+        <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+        <button class="btn danger small" type="submit">删除</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endfor %}
+  {% else %}<div class="empty">暂无病程事件</div>{% endif %}
+</div>
+
+{% if files %}
+<div class="card">
+  <h2>检查单附件（{{ files|length }}）</h2>
+  {% for f in files %}
+  <p style="margin:.4em 0">
+    <a href="/attachment/{{ f.id }}" target="_blank" rel="noopener">{{ f.filename }}</a>
+    <span class="muted" style="font-size:.82rem">{{ (f.size / 1024)|round(1) }} KB · {{ f.created_at }}</span>
+  </p>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

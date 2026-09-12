@@ -1,0 +1,41 @@
+[Unit]
+Description=@@APP_NAME@@ 在线看板
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=@@INSTALL_ROOT@@/app
+Environment=BG_DB=@@DATA_DIR@@/bunny.db
+Environment=BG_DATA=@@DATA_DIR@@
+Environment=BG_APP_NAME=@@APP_NAME@@
+Environment=BG_KB_DIR=@@KB_DIR@@
+Environment=BG_KB_GENERAL=@@KB_GENERAL_DIR@@
+Environment=BG_EXTENSIONS=@@EXT_DIR@@
+Environment=BG_GIT_AUTHOR_NAME=@@GIT_AUTHOR_NAME@@
+Environment=BG_GIT_AUTHOR_EMAIL=@@GIT_AUTHOR_EMAIL@@
+Environment=BG_LLM_BASE_URL=@@LLM_BASE_URL@@
+Environment=BG_LLM_MODEL=@@LLM_MODEL@@
+Environment=PYTHONUNBUFFERED=1
+ExecStart=@@INSTALL_ROOT@@/app/.venv/bin/python -m uvicorn main:app \
+    --host @@APP_HOST@@ --port @@APP_PORT@@ --workers 1 --no-access-log --log-level warning
+Restart=always
+RestartSec=3
+
+# 资源上限（小内存 VPS 上防止异常占用）
+MemoryMax=@@APP_MEMORY_MAX@@
+CPUQuota=@@APP_CPU_QUOTA@@
+
+# 用户级沙箱：以下属性均在普通用户单元下**逐个实测**可用（不需要 root）。
+# 三个属性在用户单元下会以 status=218/CAPABILITIES 启动失败，故不使用：
+#   CapabilityBoundingSet=、PrivateDevices=yes、ProtectKernelModules=yes
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+LockPersonality=true
+SystemCallFilter=@system-service
+
+[Install]
+WantedBy=@@WANTED_BY@@

@@ -1,0 +1,7 @@
+fastapi==0.115.6
+uvicorn==0.34.0
+jinja2==3.1.5
+python-multipart==0.0.20
+markdown==3.7
+pillow>=11.0.0
+pypdf>=5.0        # 就诊/化验单 PDF 抽文字；没装也能跑（只会提示看不到内容）

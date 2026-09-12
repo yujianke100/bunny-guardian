@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>经期记录</h1>
+
+
+<div class="calwrap" id="calwrap">
+  <div class="card">
+    <div class="calhead">
+      <button class="btn ghost small" id="calPrev" type="button">← 上月</button>
+      <b id="calTitle">—</b>
+      <button class="btn ghost small" id="calNext" type="button">下月 →</button>
+      <button class="btn ghost small" id="calToday" type="button">回到今天</button>
+      <span class="viewtoggle" role="tablist" aria-label="日历显示方式">
+        <a href="?view={{ view }}&cal=event" role="tab" aria-selected="{{ 'true' if cal_mode == 'event' else 'false' }}"
+           class="{{ 'on' if cal_mode == 'event' else '' }}">事件式</a>
+        <a href="?view={{ view }}&cal=phase" role="tab" aria-selected="{{ 'true' if cal_mode == 'phase' else 'false' }}"
+           class="{{ 'on' if cal_mode == 'phase' else '' }}">阶段配色</a>
+      </span>
+      {% if can_edit %}<button class="btn small" id="calEditToggle" type="button">✏️ 编辑经期</button>{% endif %}
+    </div>
+
+    {% if can_edit %}
+    <div class="caledit" id="calEditBar" hidden>
+      <span class="muted" id="calEditState">点一天即可，点错再点一次还原</span>
+      <span class="muted" id="calNDaysHint"></span>
+    </div>
+    {% endif %}
+
+    <div class="calgrid" id="calGrid"></div>
+
+    <div class="legend">
+      {% for l in cal_legend %}
+      <span data-phase-label="{{ l.key }}" data-phase-text="{{ l.label }}"><i style="background:{{ l.color }}"></i>{{ l.label }}</span>
+      {% endfor %}
+      {% if cal_mode == 'event' %}
+      <span><i class="lg-ovu"></i>估算排卵日（圈出的日期）</span>
+      <span><i class="lg-pred"></i>预测经期（虚线圈）</span>
+      {% endif %}
+      <span><i class="faded"></i>变淡＝尚未发生（预测）</span>
+    </div>
+
+    <div class="note" id="calTipView">{% if ring.center.example %}还没有经期记录：点上面的「✏️ 编辑经期」，在日历上点一下上次月经开始的日期就行。{% else %}浏览时点日期不会做任何事；要改经期点「✏️ 编辑经期」。{% endif %}{% if cal_mode == 'event' %}只标出<b>事件</b>：经期、预测经期、易孕窗口与估算排卵日，其余日子留白。{% else %}阶段配色：把每一天按所处阶段（经期/卵泡期/排卵期/黄体期）着色，阶段之间留缝；实色＝已发生，变淡＝尚未发生。{% endif %}</div>
+    {% if can_edit %}
+    <div class="note" id="calTipEdit" hidden>
+      编辑模式：<b>点空白的一天</b>＝记录一次经期（天数按你以往记录自动填，第一次用是 5 天）；
+      <b>这一次经期的 20 天内再点</b>＝手动增减天数（点在后面＝延长到那天，点在段内＝缩短，点起始日＝删掉这段）；
+      超过 20 天再点＝记为下一次经期。改动立即生效，点错再点一次即可还原。
+    </div>
+    {% endif %}
+  </div>
+
+  {% set _m = (cal_legend | selectattr("key", "equalto", "menstrual") | list) %}
+  <style>
+    {% for l in cal_legend %}
+    .day.ph-{{ l.key }}{background:{{ l.color }}26}
+    {% endfor %}
+    {% if _m %}.day.period{background:{{ _m[0].color }}}.day.period .n{color:#fff}{% endif %}
+  </style>
+
+  {% include "_infer_card.html" %}
+</div>
+
+{% include "_stats_card.html" %}
+
+
+<script id="caldata" type="application/json">{{ cal|safe }}</script>
+{% endblock %}
+{% block scripts %}<script src="/static/calendar.js?v=8"></script>{% endblock %}

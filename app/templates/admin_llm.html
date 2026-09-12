@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>模型接入配置</h1>
+
+{% if request.query_params.get("msg") %}<div class="flash ok">{{ request.query_params.get("msg") }}</div>{% endif %}
+{% if request.query_params.get("err") %}<div class="flash err">{{ request.query_params.get("err") }}</div>{% endif %}
+
+<div class="card">
+  <h2>当前生效</h2>
+  <dl class="kv">
+    <dt>接口地址</dt><dd><code>{{ cfg.base_url }}</code></dd>
+    <dt>模型</dt><dd><code>{{ cfg.model }}</code></dd>
+    <dt>密钥</dt><dd>{% if cfg.key_set %}<span class="tag ok">已配置</span> {{ cfg.key_hint }}{% else %}<span class="tag grey">未配置</span>{% endif %}</dd>
+    <dt>配置来源</dt><dd>{{ {"web":"网页设置","env":"环境变量","default":"内置默认（本机）"}[cfg.source] }}</dd>
+    <dt>最近更新</dt><dd>{{ cfg.updated_at or "—" }}</dd>
+    <dt>连通性</dt>
+    <dd>
+      {% if cfg.last_check %}{{ cfg.last_check }}{% else %}<span class="muted">尚未测试（点下方按钮）</span>{% endif %}
+      {% if models %}<div class="muted" style="font-size:.8rem">已缓存 {{ models|length }} 个候选模型</div>{% endif %}
+    </dd>
+  </dl>
+  {% if not cfg.db_ok %}
+  <div class="flash err">
+    <b>读不到配置数据库</b>，当前显示的是环境变量/内置默认值，并非你保存的配置。
+    请检查服务是否设置了 <code>BG_DB</code> 以及文件权限。
+  </div>
+  {% endif %}
+  {% if cfg.public_endpoint %}
+  <div class="flash warn">
+    <b>当前端点是公网地址。</b>提问时会把档案摘要（月经统计、在治疾病、近期就诊）发往该服务。
+    如不希望如此，请改回内网地址（例如 <code>http://127.0.0.1:8080/v1</code>）。
+  </div>
+  {% endif %}
+  <form method="post" action="/admin/llm/test">
+    <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+    <button class="btn ghost" type="submit">测试连通性并刷新模型列表</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>修改配置</h2>
+  <form method="post" action="/admin/llm/save" class="rowform c2">
+    <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+    <div class="span2">
+      <label for="bu">接口地址（OpenAI 兼容，通常以 /v1 结尾）</label>
+      <input id="bu" type="text" name="base_url" value="{{ cfg.base_url }}"
+             placeholder="http://127.0.0.1:8080/v1 或 https://api.example.com/v1" required>
+    </div>
+    <div><label for="md">模型名（可从列表选，也可直接填）</label>
+      <input id="md" type="text" name="model" value="{{ cfg.model }}" list="modellist"
+             placeholder="例如 deepseek-chat" required>
+      <datalist id="modellist">
+        {% for m in models %}<option value="{{ m }}"></option>{% endfor %}
+      </datalist>
+      <div class="muted" style="font-size:.78rem;margin-top:4px">
+        {% if models %}
+          候选 {{ models|length }} 个，来自 {{ models_at }} 的拉取结果。
+        {% else %}
+          暂无候选列表——点上面的「测试连通性并刷新模型列表」，成功后这里就能下拉选择。
+        {% endif %}
+      </div>
+    </div>
+    <div><label for="ky">API Key（留空＝保持现有密钥）</label>
+      <input id="ky" type="password" name="api_key" autocomplete="new-password"
+             placeholder="{% if cfg.key_set %}已保存 {{ cfg.key_hint }}，输入新值可替换{% else %}粘贴密钥{% endif %}"></div>
+    <div class="span2">
+      <label style="display:inline-flex;align-items:center;gap:6px;font-size:.88rem">
+        <input type="checkbox" name="allow_public" value="1" style="width:auto"
+               {{ "checked" if cfg.allow_public else "" }}>
+        我了解数据外发风险，允许使用公网模型端点
+      </label>
+    </div>
+    <div class="span2"><button class="btn" type="submit">保存配置</button></div>
+  </form>
+  <form method="post" action="/admin/llm/key/clear" data-confirm="清除已保存的 API Key？">
+    <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+    <button class="btn danger" type="submit">清除 API Key</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>密钥是怎么存的</h2>
+  <ul style="font-size:.92rem">
+    <li>密钥写入服务器上的独立文件 <code>{{ key_path }}</code>，权限 <code>600</code>、属主为服务账号；
+        不写入数据库，因此数据库导出与 git 仓库都不含密钥。</li>
+    <li>页面和接口<b>永不回显</b>密钥全文，只显示后 4 位用于辨认；日志与审计只记录「是否变更」。</li>
+    <li>保存时先写临时文件再原子替换，避免中途失败留下半截内容。</li>
+    <li>公网端点必须显式勾选风险确认才能保存，防止健康数据在不知情的情况下外发。</li>
+    <li>更换密钥后，正在运行的智能体会话要重启才会生效（<code>sudo bash deploy/pi/agent.sh</code>）。</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h2>智能体（pi）如何使用这份配置</h2>
+  <p style="font-size:.92rem">
+    启动脚本会用这份配置生成 pi 的模型清单：
+    <code>app/.venv/bin/python app/llm_config.py models-json &gt; ~/.pi/agent/models.json</code>，
+    并以 <code>--provider bg</code> 启动。因此在这里改完配置后，智能体下次启动即生效，无需改代码。
+  </p>
+  <div class="note">
+    注意：如果端点是不支持结构化 <code>tool_calls</code> 的服务（例如未加
+    <code>--tool-call-parser</code> 的 sglang），智能体会认不出工具调用。届时可改用支持
+    函数调用的官方 API，或让服务端开启对应的解析器。
+  </div>
+</div>
+{% endblock %}

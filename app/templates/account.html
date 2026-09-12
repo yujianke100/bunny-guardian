@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>我的账号</h1>
+
+{% if request.query_params.get("msg") %}<div class="flash ok">{{ request.query_params.get("msg") }}</div>{% endif %}
+{% if request.query_params.get("err") %}<div class="flash err">{{ request.query_params.get("err") }}</div>{% endif %}
+{% if must_change %}<div class="flash warn">当前使用的是初始密码，请立即修改。</div>{% endif %}
+
+<div class="card">
+  <h2>账号信息</h2>
+  <dl class="kv">
+    <dt>用户名</dt><dd>{{ user.username }}</dd>
+    <dt>界面显示</dt><dd>{{ user.shown_name }}{% if not user.nickname %}（昵称未设置，显示用户名）{% endif %}</dd>
+    <dt>角色</dt><dd>{{ "管理员" if user.is_admin else "成员" }}</dd>
+    <dt>上次登录</dt><dd>{{ user.row.last_login_at or "—" }}</dd>
+  </dl>
+</div>
+
+<div class="card">
+  <h2>昵称</h2>
+  <form method="post" action="/account/profile" class="rowform c2">
+    <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+    <div class="span2">
+      <label for="nk">昵称（最多 20 字；留空＝显示用户名）</label>
+      <input id="nk" type="text" name="nickname" value="{{ user.nickname }}" maxlength="20"
+             placeholder="{{ user.username }}">
+      <div class="muted" style="font-size:.78rem;margin-top:4px">
+        页面右上角显示的就是这个名字：{% if user.row.who == "him" %}<b>蓝色底纹</b>（他）{% elif user.row.who == "her" %}<b>粉色底纹</b>（她）{% else %}身份未指定（灰底），可由管理员在「系统管理 → 账号」里设置{% endif %}。
+      </div>
+    </div>
+    <div class="span2"><button class="btn" type="submit">保存昵称</button></div>
+  </form>
+</div>
+
+<div class="card">
+  <h2>修改密码</h2>
+  <form method="post" action="/account/password" class="rowform c2">
+    <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+    <div><label for="op">原密码</label><input id="op" type="password" name="old_password" autocomplete="current-password" required></div>
+    <div><label for="np">新密码（至少 8 位）</label><input id="np" type="password" name="new_password" autocomplete="new-password" required minlength="8"></div>
+    <div><label for="cf">确认新密码</label><input id="cf" type="password" name="confirm" autocomplete="new-password" required minlength="8"></div>
+    <div class="span2"><button class="btn" type="submit">更新密码</button></div>
+  </form>
+  <div class="note">修改密码后，其他设备上的登录会话会被注销，当前设备保持登录。</div>
+</div>
+
+<div class="card">
+  <h2>我的权限</h2>
+  <dl class="kv">
+    <dt>身份</dt><dd>{{ {"her":"她（档案主人）","him":"他（一起记录）"}.get(user.row.who, "未指定") }}</dd>
+    <dt>数据权限</dt><dd><span class="tag ok">完整（可读可写）</span></dd>
+    <dt>系统配置</dt>
+    <dd>{% if user.is_admin %}<span class="tag ok">管理员</span>（可管理账号、模型 API、备份与同步）{% else %}<span class="tag grey">普通账号</span>（无需操心系统配置）{% endif %}</dd>
+  </dl>
+  <div class="note">
+    经期、疾病、就医、知识库与问答这些<b>数据对两个账号完全互通</b>——你们是在共同给同一个人做记录。
+    日常只需要用数据部分；配置相关的事情交给管理员即可。
+  </div>
+</div>
+{% endblock %}

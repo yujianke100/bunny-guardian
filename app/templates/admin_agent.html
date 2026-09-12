@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>智能体权限</h1>
+<p><a class="btn ghost small" href="/admin">← 返回管理</a> · <a class="btn ghost small" href="/admin/llm">模型接入配置 →</a></p>
+
+{% if request.query_params.get("msg") %}<div class="flash ok">{{ request.query_params.get("msg") }}</div>{% endif %}
+{% if request.query_params.get("err") %}<div class="flash err">{{ request.query_params.get("err") }}</div>{% endif %}
+{% if request.query_params.get("token") %}
+<div class="flash warn">
+  <b>新令牌（仅本次显示，请立即保存到服务器的环境文件中）</b><br>
+  <code style="font-size:.95rem;word-break:break-all">{{ request.query_params.get("token") }}</code>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>总开关</h2>
+  <dl class="kv">
+    <dt>当前状态</dt>
+    <dd>{% if st.enabled %}<span class="tag ok">已启用</span>{% else %}<span class="tag danger">已停用</span>{% endif %}</dd>
+    <dt>今日调用</dt><dd>{{ st.today_calls }} 次，其中被拒 {{ st.today_denied }} 次（{{ st.today }}）</dd>
+    <dt>待批准提案</dt><dd>{{ st.pending }} 条</dd>
+  </dl>
+  <form method="post" action="/admin/agent/toggle">
+    <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+    <button class="btn {{ 'danger' if st.enabled else '' }}" type="submit">
+      {{ "停用智能体" if st.enabled else "启用智能体" }}
+    </button>
+  </form>
+  <div class="note">停用后所有智能体接口立即返回 401，正在运行的会话也无法继续调用工具。</div>
+</div>
+
+{% if pending %}
+<div class="card">
+  <h2>待批准的写入提案（{{ pending|length }}）</h2>
+  <div class="tablewrap">
+    <table>
+      <tr><th>#</th><th>动作</th><th class="wrap">内容</th><th class="wrap">理由</th><th>时间</th><th class="wrap">操作</th></tr>
+      {% for p in pending %}
+      <tr>
+        <td>{{ p.id }}</td>
+        <td>{{ p.kind_cn }}</td>
+        <td class="wrap">
+          {% for k, v in p.payload_obj.items() %}<div><b>{{ k }}</b>: {{ v }}</div>{% endfor %}
+        </td>
+        <td class="wrap muted">{{ p.rationale or "—" }}</td>
+        <td class="muted" style="font-size:.8rem">{{ p.created_at }}</td>
+        <td class="wrap">
+          <form class="inline" method="post" action="/admin/agent/proposal/{{ p.id }}/decide">
+            <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+            <input type="hidden" name="action" value="approve">
+            <button class="btn small" type="submit">批准并写入</button>
+          </form>
+          <form class="inline" method="post" action="/admin/agent/proposal/{{ p.id }}/decide" data-confirm="拒绝这条提案？">
+            <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+            <input type="hidden" name="action" value="reject">
+            <button class="btn danger small" type="submit">拒绝</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+  <div class="note">智能体不能直接写库：它只能提交提案，必须由你在这里批准后才会真正落库。</div>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>访问令牌</h2>
+  {% if tokens %}
+  <div class="tablewrap">
+    <table>
+      <tr><th>标签</th><th>创建</th><th>最后使用</th><th>次数</th><th>状态</th></tr>
+      {% for t in tokens %}
+      <tr>
+        <td>{{ t.label }}</td>
+        <td class="muted" style="font-size:.82rem">{{ t.created_at }}</td>
+        <td class="muted" style="font-size:.82rem">{{ t.last_used_at or "—" }}</td>
+        <td>{{ t.uses }}</td>
+        <td>{% if t.revoked %}<span class="tag danger">已吊销</span>{% else %}<span class="tag ok">有效</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">还没有令牌。生成后写入服务器上的环境文件（仅 root 可读），智能体用它调用本系统。</div>
+  {% endif %}
+  <div class="actions">
+    <form method="post" action="/admin/agent/token">
+      <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+      <label for="lb">标签</label>
+      <input id="lb" type="text" name="label" value="pi agent" style="max-width:220px">
+      <button class="btn" type="submit">生成新令牌</button>
+    </form>
+    <form method="post" action="/admin/agent/token/revoke" data-confirm="吊销全部令牌？正在运行的智能体会立即失效。">
+      <input type="hidden" name="csrf" value="{{ user.csrf() }}">
+      <button class="btn danger" type="submit">吊销全部</button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <h2>今日配额</h2>
+  <div class="tablewrap">
+    <table>
+      <tr><th>工具</th><th>已用</th><th>上限</th><th>剩余</th></tr>
+      {% for q in quotas %}
+      <tr><td>{{ q.tool }}</td><td>{{ q.used }}</td><td>{{ q.limit }}</td><td>{{ q.left }}</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+  <div class="note">配额在服务端强制，用来给「提示注入导致智能体反复刷接口」封顶。次日自动重置。</div>
+</div>
+
+<div class="card">
+  <h2>允许智能体联网抓取的域名</h2>
+  <p style="font-size:.9rem">{% for d in allowlist %}<span class="tag grey">{{ d }}</span>{% endfor %}</p>
+  <div class="note">白名单之外一律拒绝；抓取前还会经过隐私围栏（不得包含姓名、账号、域名、邮箱、具体日期）。</div>
+</div>
+
+<div class="card">
+  <h2>可提交的提案类型</h2>
+  <div class="tablewrap">
+    <table>
+      <tr><th>类型</th><th class="wrap">含义</th></tr>
+      {% for k, v in kinds.items() %}<tr><td>{{ k }}</td><td class="wrap">{{ v }}</td></tr>{% endfor %}
+    </table>
+  </div>
+</div>
+
+{% if recent %}
+<div class="card">
+  <h2>提案历史</h2>
+  <div class="tablewrap">
+    <table>
+      <tr><th>#</th><th>动作</th><th>状态</th><th class="wrap">结果</th><th>时间</th></tr>
+      {% for p in recent %}
+      <tr>
+        <td>{{ p.id }}</td>
+        <td>{{ p.kind_cn }}</td>
+        <td>
+          {% set cls = {"applied":"ok","pending":"warn","rejected":"grey","failed":"danger"} %}
+          <span class="tag {{ cls.get(p.status, 'grey') }}">{{ p.status }}</span>
+        </td>
+        <td class="wrap muted" style="font-size:.84rem">{{ p.apply_result or "—" }}</td>
+        <td class="muted" style="font-size:.8rem">{{ p.created_at }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>审计日志（最近 {{ audit|length }} 条）</h2>
+  <div class="tablewrap">
+    <table>
+      <tr><th>时间</th><th>工具</th><th>结果</th><th class="wrap">详情</th><th class="wrap">内容摘要</th></tr>
+      {% for a in audit %}
+      <tr>
+        <td class="muted" style="font-size:.8rem">{{ a.at }}</td>
+        <td>{{ a.tool }}</td>
+        <td>
+          {% set cls = {"allowed":"ok","denied":"danger","error":"warn"} %}
+          <span class="tag {{ cls.get(a.decision, 'grey') }}">{{ a.decision }}</span>
+        </td>
+        <td class="wrap" style="font-size:.84rem">{{ a.detail }}</td>
+        <td class="wrap muted" style="font-size:.8rem">{{ a.preview }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+  <div class="note">每一次工具调用都会留痕，包括被拒绝的调用。被拒记录是排查提示注入的主要线索。</div>
+</div>
+{% endblock %}
