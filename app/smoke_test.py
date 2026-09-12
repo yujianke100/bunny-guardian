@@ -1871,10 +1871,12 @@ def main() -> int:
           not pathlib.Path("../deploy/systemd-user/APP_SLUG-backup.timer").exists()
           and not pathlib.Path("../deploy/systemd-user/APP_SLUG-backup.service").exists()
           and pathlib.Path("../deploy/systemd-user/APP_SLUG-maint.timer").exists())
+    # 注意：_instsrc 在下面同步那一节才赋值，这里自己读一遍（曾因用到未赋值的变量直接崩）
+    _inst = open("../deploy/install.sh", encoding="utf-8").read()
     check("安装脚本不再启用定期备份，并会清理老版本装过的",
-          'enable --now "$APP_SLUG-backup.timer"' not in _instsrc
-          and 'disable --now "$u"' in _instsrc
-          and '"$APP_SLUG-backup.timer" "$APP_SLUG-backup.service"' in _instsrc)
+          'enable --now "$APP_SLUG-backup.timer"' not in _inst
+          and 'disable --now "$u"' in _inst
+          and '"$APP_SLUG-backup.timer" "$APP_SLUG-backup.service"' in _inst)
     check("SQLite 快照默认关闭（它写在被 gitignore 的 data/ 下，推不出去）",
           'kb_snapshot_db", "0"' in open("sync_job.py", encoding="utf-8").read())
     _instsrc = open("../deploy/install.sh", encoding="utf-8").read()
