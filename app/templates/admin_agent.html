@@ -69,10 +69,16 @@
   {% if tokens %}
   <div class="tablewrap">
     <table>
-      <tr><th>标签</th><th>创建</th><th>最后使用</th><th>次数</th><th>状态</th></tr>
+      <tr><th>标签</th><th>作用域</th><th>创建</th><th>最后使用</th><th>次数</th><th>状态</th></tr>
       {% for t in tokens %}
       <tr>
         <td>{{ t.label }}</td>
+        <td>
+          {% if t.scope == "write" %}<span class="tag danger">write</span>
+            <span class="muted" style="font-size:.78rem">可改数据</span>
+          {% else %}<span class="tag grey">read</span>
+            <span class="muted" style="font-size:.78rem">只读</span>{% endif %}
+        </td>
         <td class="muted" style="font-size:.82rem">{{ t.created_at }}</td>
         <td class="muted" style="font-size:.82rem">{{ t.last_used_at or "—" }}</td>
         <td>{{ t.uses }}</td>
@@ -88,7 +94,13 @@
     <form method="post" action="/admin/agent/token">
       <input type="hidden" name="csrf" value="{{ user.csrf() }}">
       <label for="lb">标签</label>
-      <input id="lb" type="text" name="label" value="pi agent" style="max-width:220px">
+      <input id="lb" type="text" name="label" value="pi agent" style="max-width:200px">
+      <label for="sc">作用域</label>
+      <select id="sc" name="scope" style="max-width:340px">
+        {% for sc in scopes %}
+        <option value="{{ sc }}">{{ sc }} — {{ scope_cn[sc] }}</option>
+        {% endfor %}
+      </select>
       <button class="btn" type="submit">生成新令牌</button>
     </form>
     <form method="post" action="/admin/agent/token/revoke" data-confirm="吊销全部令牌？正在运行的智能体会立即失效。">
@@ -172,3 +184,29 @@
   <div class="note">每一次工具调用都会留痕，包括被拒绝的调用。被拒记录是排查提示注入的主要线索。</div>
 </div>
 {% endblock %}
+
+<div class="card">
+  <h2>直接写接口（/api/agent/op）</h2>
+  <p class="muted">持有 <b>write</b> 作用域令牌的外部智能体可以调这个接口<b>直接增删改</b>业务数据，
+    不需要在网页上逐条批准。只读类操作任何令牌都能调；每次调用都会写进上面的审计表。</p>
+  <p class="muted" style="font-size:.86rem">
+    先 <code>GET /api/agent/ops</code> 拿到自己作用域下的操作清单；
+    <code>POST /api/agent/op</code> 传 <code>{"op":"...","args":{...}}</code>；
+    想先验证不真写就加 <code>"dry_run":true</code>（照常校验并执行，然后回滚）。</p>
+  <div class="tablewrap">
+    <table>
+      <tr><th>操作</th><th>需要</th><th>说明</th></tr>
+      {% for name, meta in ops.items() %}
+      <tr>
+        <td><code>{{ name }}</code></td>
+        <td>{% if meta.need == "write" %}<span class="tag danger">write</span>{% else %}<span class="tag grey">read</span>{% endif %}</td>
+        <td class="muted" style="font-size:.84rem">{{ meta.summary }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+  <p class="muted" style="font-size:.84rem;margin-top:10px"><b>这一层故意不做的事</b>（避免令牌自我提权或读出凭据）：</p>
+  <ul class="muted" style="font-size:.84rem">
+    {% for d in ops_denied %}<li>{{ d }}</li>{% endfor %}
+  </ul>
+</div>

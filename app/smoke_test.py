@@ -1070,6 +1070,99 @@ def main() -> int:
 
     st, body = call(op, "/api/agent/ping", headers=H)
     check("带令牌可访问", st == 200 and '"ok"' in body, f"status={st}")
+    check("令牌默认是只读作用域（建令牌时不会顺手给写权限）",
+          '"scope":"read"' in body, body[:200])
+
+    # ---- 直接写接口：read 令牌必须被挡住 ----
+    st, body = call(op, "/api/agent/ops", headers=H)
+    check("操作清单可用且说明作用域",
+          st == 200 and '"read"' in body and "可用操作" in body, f"status={st}")
+    check("只读令牌的清单里没有写操作",
+          "cycle.delete" not in body and "kb.write" not in body, body[:200])
+    check("清单如实列出不支持的（账号/令牌/密钥/备份）",
+          "令牌管理" in body and "备份" in body)
+    st, body = call_json(op, "/api/agent/op",
+                         {"op": "cycle.add", "args": {"start_date": "2026-10-01"}}, headers=H)
+    check("read 令牌直接写被拒（403，并指向提案接口）",
+          st == 403 and "write" in body and "propose" in body, f"status={st} {body[:200]}")
+    n_before = n_cycles()
+    st, body = call_json(op, "/api/agent/op", {"op": "cycle.list"}, headers=H)
+    check("read 令牌可以调读操作（同一接口）", st == 200 and "月经记录" in body, f"status={st}")
+
+    # ---- 换一个 write 令牌 ----
+    st, body = call(op, "/admin/agent/token", {"csrf": atok, "label": "smoke-write",
+                                               "scope": "write"}, follow=True)
+    m2 = re.search(r"(bg_[A-Za-z0-9_\-]{20,})", body)
+    wtoken = m2.group(1) if m2 else ""
+    check("可以生成 write 作用域令牌", bool(wtoken))
+    check("生成 write 令牌时页面给出警告", "能直接改数据" in body, body[:200])
+    check("令牌表里标出了作用域", ">write<" in call(op, "/admin/agent")[1])
+    WH = {"X-Agent-Token": wtoken}
+    st, body = call(op, "/api/agent/ping", headers=WH)
+    check("write 令牌自报作用域", '"scope":"write"' in body, body[:200])
+    st, body = call(op, "/api/agent/ops", headers=WH)
+    check("write 令牌的清单里有写操作",
+          "cycle.delete" in body and "kb.write" in body, body[:200])
+
+    # ---- dry_run：校验但不落库 ----
+    st, body = call_json(op, "/api/agent/op",
+                         {"op": "cycle.add", "args": {"start_date": "2026-11-01"},
+                          "dry_run": True}, headers=WH)
+    check("dry_run 成功返回且标记了 dry_run",
+          st == 200 and '"dry_run"' in body, f"status={st} {body[:200]}")
+    check("dry_run 真的没写进去（条数不变）", n_cycles() == n_before,
+          f"{n_before} -> {n_cycles()}")
+    st, body = call_json(op, "/api/agent/op",
+                         {"op": "cycle.add", "args": {"start_date": "not-a-date"},
+                          "dry_run": True}, headers=WH)
+    check("dry_run 也会做参数校验（400）", st == 400 and "不是合法日期" in body, f"status={st}")
+
+    # ---- write 令牌真的能直接写 ----
+    st, body = call_json(op, "/api/agent/op",
+                         {"op": "cycle.add", "args": {"start_date": "2026-11-01",
+                                                      "end_date": "2026-11-05",
+                                                      "flow": "medium",
+                                                      "symptoms": "智能体代录"}}, headers=WH)
+    check("write 令牌能直接新增月经记录（无需批准）",
+          st == 200 and "已新增月经记录" in body, f"status={st} {body[:200]}")
+    check("写完之后记录数真的变了", n_cycles() == n_before + 1, f"{n_before} -> {n_cycles()}")
+    st, body = call(op, "/cycle")
+    check("网页上能看到智能体写进去的那条（同一份数据）",
+          "智能体代录" in body, body[:160])
+
+    # 参数校验的错误要原样告诉智能体，便于它自己改
+    for bad_op, bad_args, want in [
+        ("cycle.add", {}, "缺少必填日期"),
+        ("cycle.add", {"start_date": "2026-11-10", "flow": "zzz"}, "只能是"),
+        ("condition.add", {"name": "  "}, "不能为空"),
+        ("condition.delete", {"id": 999999}, "找不到"),
+        ("kb.write", {"path": "../x.md", "body": "y"}, "相对路径"),
+        ("nope.op", {}, "不支持的操作"),
+    ]:
+        st, body = call_json(op, "/api/agent/op", {"op": bad_op, "args": bad_args}, headers=WH)
+        check(f"参数/状态错误给 400 且说清原因：{bad_op}",
+              st == 400 and want in body, f"status={st} {body[:180]}")
+
+    # 越权：write 令牌也不能碰账号与令牌管理（那属于实例控制，不在这一层）
+    st, body = call_json(op, "/api/agent/op", {"op": "user.create", "args": {}}, headers=WH)
+    check("账号/令牌类操作不在接口里（拒绝而不是执行）",
+          st == 400 and "不支持的操作" in body, f"status={st}")
+
+    # 无令牌一样被挡
+    st, _ = call_json(op, "/api/agent/op", {"op": "cycle.delete", "args": {"id": 1}})
+    check("无令牌调直接写接口被拒（401）", st == 401, f"status={st}")
+
+    # 审计：直接写要留痕
+    with dbm.db() as _ac:
+        ok_rows = _ac.execute("SELECT tool, decision, detail FROM agent_audit WHERE tool='op'"
+                              " ORDER BY id DESC LIMIT 30").fetchall()
+        denied = _ac.execute("SELECT tool, decision, detail FROM agent_audit"
+                             " WHERE decision='denied' AND token_label='smoke-test'"
+                             " ORDER BY id DESC LIMIT 10").fetchall()
+    check("直接写操作写进了审计表", len(ok_rows) >= 3, [dict(r) for r in ok_rows][:3])
+    check("越权尝试也留了痕（read 令牌写被拒时记 denied）",
+          any(r["decision"] == "denied" for r in denied), [dict(r) for r in denied][:3])
+
     st, body = call(op, "/api/agent/context", headers=H)
     check("读取档案概览（含月经推断）", st == 200 and "月经" in body and "推断" in body, f"status={st}")
     st, body = call_json(op, "/api/agent/query", {"kind": "cycle_stats"}, headers=H)

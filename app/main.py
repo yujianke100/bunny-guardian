@@ -29,6 +29,7 @@ from fastapi.templating import Jinja2Templates
 
 import auth as authm
 import agent as agentm
+import agent_ops as agent_opsm
 import backup as backupm
 import bmi as bmim
 import chart as chartm
@@ -2733,11 +2734,27 @@ AGENT_TOKEN_HEADER = "x-agent-token"
 
 
 class AgentCtx:
-    """智能体调用上下文：持有数据库连接与令牌标签，统一写审计。"""
+    """智能体调用上下文：数据库连接 + 令牌标签 + 作用域，统一写审计。"""
 
-    def __init__(self, conn, label: str):
+    def __init__(self, conn, label: str, scope: str = "read"):
         self.conn = conn
         self.label = label
+        self.scope = scope if scope in agentm.SCOPES else "read"
+
+    @property
+    def can_write(self) -> bool:
+        return self.scope == "write"
+
+    def need_write(self, tool: str) -> None:
+        """写操作的门：必须是 write 作用域令牌。"""
+        if not self.can_write:
+            agentm.audit(self.conn, self.label, tool, "denied",
+                         "令牌作用域为 read，不允许直接写")
+            raise HTTPException(
+                status_code=403,
+                detail="当前令牌是只读作用域（read），不能直接改数据。"
+                       "请让档案主人在「管理 → 智能体权限」里生成一个 write 作用域令牌，"
+                       "或改用 /api/agent/propose 提交待批准提案。")
 
     def log(self, tool: str, decision: str, detail: str = "", preview: str = "") -> None:
         agentm.audit(self.conn, self.label, tool, decision, detail, preview)
@@ -2752,14 +2769,14 @@ async def require_agent(request: Request):
     """智能体接口鉴权：作用域令牌 + 全局开关。"""
     raw = request.headers.get(AGENT_TOKEN_HEADER) or ""
     conn = dbm.connect()
-    ok, info = agentm.check_token(conn, raw)
+    ok, info, scope = agentm.check_token(conn, raw)
     if not ok:
         agentm.audit(conn, "", "auth", "denied", info, request.url.path)
         conn.commit()
         conn.close()
         raise HTTPException(status_code=401, detail=f"智能体令牌校验失败：{info}")
     try:
-        yield AgentCtx(conn, info)
+        yield AgentCtx(conn, info, scope)
         conn.commit()
     except Exception:
         conn.rollback()
@@ -2771,9 +2788,15 @@ async def require_agent(request: Request):
 @app.get("/api/agent/ping")
 def agent_ping(user=Depends(require_agent)):
     user.log("ping", "allowed")
-    return {"ok": True, "label": user.label, "quotas": agentm.quota_view(user.conn),
-            "scope": {"允许": ["病情询问", "联网搜索", "病情问答", "数据归档（需批准）", "月经询问与预测"],
-                      "禁止": ["执行命令", "直接写库", "删除数据", "修改知识文档", "直接 push", "白名单外网络"]}}
+    can_write = user.can_write
+    allowed = ["病情询问", "联网搜索", "病情问答", "月经询问与预测"]
+    allowed += (["直接读写业务数据（POST /api/agent/op，无需人工批准）"] if can_write
+                else ["提交待批准提案（POST /api/agent/propose）"])
+    return {"ok": True, "label": user.label, "scope": user.scope,
+            "作用域说明": agentm.SCOPE_CN[user.scope], "quotas": agentm.quota_view(user.conn),
+            "允许": allowed,
+            "禁止": ["执行命令", "账号与会话管理", "令牌管理", "读取模型端点密钥",
+                    "备份的恢复与删除", "白名单外网络"]}
 
 
 @app.get("/api/agent/context")
@@ -2833,6 +2856,44 @@ async def agent_guard(request: Request, user=Depends(require_agent)):
     raise HTTPException(status_code=400, detail="kind 只能是 search 或 fetch")
 
 
+@app.get("/api/agent/ops")
+def agent_ops_list(user=Depends(require_agent)):
+    """这个令牌能用的操作清单（按作用域过滤），供外部智能体自述能力。"""
+    user.log("ops", "allowed", user.scope)
+    return agent_opsm.catalog(user.scope)
+
+
+@app.post("/api/agent/op")
+async def agent_op(request: Request, user=Depends(require_agent)):
+    """**直接**执行一个数据操作（增删改查），不需要人工批准。
+
+    只有 scope=write 的令牌能用写入类操作；只读类操作任何令牌都能用。
+    支持 dry_run=1：照常校验并执行，然后回滚——先验证再真写。
+    `GET /api/agent/ops` 有完整清单。
+    """
+    body = await request.json()
+    op = str(body.get("op", ""))
+    args = body.get("args") or {}
+    dry_run = bool(body.get("dry_run"))
+    need = agent_opsm.OPS.get(op, {}).get("need", "read")
+    if need == "write":
+        user.need_write(op)
+        user.need_quota("op")
+    pid = dbm.ensure_profile(user.conn)
+    try:
+        out = agent_opsm.run(user.conn, pid, op, args, dry_run=dry_run)
+    except agent_opsm.OpError as e:
+        user.log("op", "denied", f"{op}: {e}", json.dumps(args, ensure_ascii=False)[:200])
+        raise HTTPException(status_code=400, detail=str(e))
+    if dry_run:
+        # 校验与执行都跑过了，把事务丢掉——dry_run 不该改变任何东西
+        user.conn.rollback()
+        user.log("op", "allowed", f"{op} (dry_run)")
+        return out
+    user.log("op", "allowed", op, json.dumps(out, ensure_ascii=False)[:200])
+    return out
+
+
 @app.post("/api/agent/propose")
 async def agent_propose(request: Request, user=Depends(require_agent)):
     user.need_quota("propose")
@@ -2879,7 +2940,9 @@ def admin_agent(request: Request, user=Depends(authm.require_login), msg: str = 
                   st=agentm.stats(conn), tokens=agentm.active_token_info(conn),
                   pending=pending, recent=recent, audit=agentm.audit_view(conn, 60),
                   quotas=agentm.quota_view(conn), allowlist=agentm.FETCH_ALLOWLIST,
-                  kinds=agentm.PROPOSAL_KINDS, msg=msg, err=err)
+                  kinds=agentm.PROPOSAL_KINDS, scopes=agentm.SCOPES,
+                  scope_cn=agentm.SCOPE_CN, ops=agent_opsm.OPS,
+                  ops_denied=agent_opsm.NOT_SUPPORTED, msg=msg, err=err)
 
 
 # ------------------------------------------------------------------ 数据同步（网页可配目标仓库）
@@ -3128,13 +3191,17 @@ def admin_agent_toggle(request: Request, user=Depends(authm.require_login), csrf
 
 @app.post("/admin/agent/token")
 def admin_agent_token(request: Request, user=Depends(authm.require_login), csrf: str = Form(""),
-                      label: str = Form("pi agent")):
+                      label: str = Form("pi agent"), scope: str = Form("read")):
     user.require_admin()
     csrf_ok(request, user, csrf)
-    raw = agentm.create_token(user.conn, label.strip() or "pi agent", user.id)
-    user.audit("agent_token_create", label, client_ip(request))
-    return RedirectResponse(url=f"/admin/agent?msg=已生成新令牌（仅本次显示）&token={raw}",
-                            status_code=303)
+    scope = scope if scope in agentm.SCOPES else "read"
+    raw = agentm.create_token(user.conn, label.strip() or "pi agent", user.id, scope=scope)
+    user.audit("agent_token_create", f"{label} scope={scope}", client_ip(request))
+    msg = (f"已生成新令牌（作用域 {scope}，仅本次显示）"
+           + ("——**这个令牌能直接改数据**，泄露等于把病历交出去，请妥善保管"
+              if scope == "write" else ""))
+    return RedirectResponse(
+        url=f"/admin/agent?msg={urllib.parse.quote(msg)}&token={raw}", status_code=303)
 
 
 @app.post("/admin/agent/token/revoke")

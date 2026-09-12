@@ -28,6 +28,7 @@ DAILY_QUOTA = {
     "context": 60,
     "records_query": 120,
     "kb_search": 120,
+    "op": 300,          # 直接写操作（write 作用域令牌），按天
 }
 
 # 允许智能体抓取的域名白名单（权威医学来源）；不在表内的一律拒绝
@@ -63,7 +64,8 @@ CREATE TABLE IF NOT EXISTS agent_tokens (
     created_by INTEGER,
     revoked INTEGER NOT NULL DEFAULT 0,
     last_used_at TEXT,
-    uses INTEGER NOT NULL DEFAULT 0
+    uses INTEGER NOT NULL DEFAULT 0,
+    scope TEXT NOT NULL DEFAULT 'read'         -- read=只读 | write=可读可写（直接落库）
 );
 
 CREATE TABLE IF NOT EXISTS agent_audit (
@@ -108,20 +110,46 @@ PROPOSAL_KINDS = {
 
 def init(conn) -> None:
     conn.executescript(SCHEMA)
+    # 老库升级：agent_tokens 原本没有 scope（那时令牌一律只读）
+    _ensure_column(conn, "agent_tokens", "scope", "scope TEXT NOT NULL DEFAULT 'read'")
+
+
+def _ensure_column(conn, table: str, column: str, ddl: str) -> None:
+    cols = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+    if column not in cols:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {ddl}")
 
 
 # ------------------------------------------------------------------ 令牌
+
+SCOPES = ("read", "write")
+
+SCOPE_CN = {
+    "read": "只读（提问、检索、查询；写入只能提交待批准提案）",
+    "write": "可写（在只读之外，可直接增删改业务数据，无需人工批准）",
+}
+
 
 def hash_token(raw: str) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-def create_token(conn, label: str = "pi agent", created_by: int | None = None) -> str:
-    """生成新令牌（明文只返回一次，库里只存哈希）。"""
+def create_token(conn, label: str = "pi agent", created_by: int | None = None,
+                 scope: str = "read") -> str:
+    """生成新令牌（明文只返回一次，库里只存哈希）。
+
+    scope 决定这个令牌能干什么，**默认 read**：
+      read   只读 + 提交待批准提案（原有行为）
+      write  在只读之外可直接增删改业务数据（见 app/agent_ops.py）
+    为什么默认只读：令牌一旦泄露，write 令牌等价于「能改病历的那把钥匙」，
+    所以要有人明确选择，而不是建令牌时顺手拿到全部权限。
+    """
+    scope = scope if scope in SCOPES else "read"
     raw = "bg_" + secrets.token_urlsafe(32)
     conn.execute(
-        "INSERT INTO agent_tokens(label, token_hash, created_at, created_by) VALUES(?,?,?,?)",
-        (label[:60], hash_token(raw), _now(), created_by))
+        "INSERT INTO agent_tokens(label, token_hash, created_at, created_by, scope)"
+        " VALUES(?,?,?,?,?)",
+        (label[:60], hash_token(raw), _now(), created_by, scope))
     return raw
 
 
@@ -129,24 +157,28 @@ def revoke_all(conn) -> None:
     conn.execute("UPDATE agent_tokens SET revoked=1")
 
 
-def check_token(conn, raw: str | None) -> tuple[bool, str]:
-    """校验令牌；返回 (是否有效, 标签/原因)。"""
+def check_token(conn, raw: str | None) -> tuple[bool, str, str]:
+    """校验令牌；返回 (是否有效, 标签或原因, 作用域)。
+
+    作用域只在令牌有效时才有意义；无效时第三项固定为 "read"（调用方用不上）。
+    """
     if not raw:
-        return False, "缺少令牌"
+        return False, "缺少令牌", "read"
     if get_setting(conn, "agent_enabled", "0") != "1":
-        return False, "智能体功能当前已停用"
+        return False, "智能体功能当前已停用", "read"
     row = conn.execute(
         "SELECT * FROM agent_tokens WHERE token_hash=? AND revoked=0", (hash_token(raw),)).fetchone()
     if row is None:
-        return False, "令牌无效或已吊销"
+        return False, "令牌无效或已吊销", "read"
     conn.execute("UPDATE agent_tokens SET last_used_at=?, uses=uses+1 WHERE id=?",
                  (_now(), row["id"]))
-    return True, row["label"]
+    scope = (row["scope"] if "scope" in row.keys() else "read") or "read"
+    return True, row["label"], (scope if scope in SCOPES else "read")
 
 
 def active_token_info(conn) -> list[dict]:
     rows = conn.execute(
-        "SELECT id, label, created_at, last_used_at, uses, revoked FROM agent_tokens"
+        "SELECT id, label, created_at, last_used_at, uses, revoked, scope FROM agent_tokens"
         " ORDER BY id DESC LIMIT 10").fetchall()
     return [dict(r) for r in rows]
 
