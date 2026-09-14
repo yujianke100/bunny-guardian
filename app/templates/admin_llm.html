@@ -46,17 +46,24 @@
       <input id="bu" type="text" name="base_url" value="{{ cfg.base_url }}"
              placeholder="http://127.0.0.1:8080/v1 或 https://api.example.com/v1" required>
     </div>
-    <div><label for="md">模型名（可从列表选，也可直接填）</label>
+    <div><label for="md">模型名（可从下面点一个，也可直接填）</label>
       <input id="md" type="text" name="model" value="{{ cfg.model }}" list="modellist"
              placeholder="例如 deepseek-chat" required>
       <datalist id="modellist">
         {% for m in models %}<option value="{{ m }}"></option>{% endfor %}
       </datalist>
+      {# 候选直接摆出来点：datalist 在手机上（尤其 iOS Safari）常常点不开，
+         所以别只靠它——把候选渲染成可点的胶囊，点一下填进输入框。 #}
+      {% if models %}
+      <div class="mchips" id="mchips">
+        {% for m in models %}<button type="button" class="mchip" data-model="{{ m }}">{{ m }}</button>{% endfor %}
+      </div>
+      {% endif %}
       <div class="muted" style="font-size:.78rem;margin-top:4px">
         {% if models %}
           候选 {{ models|length }} 个，来自 {{ models_at }} 的拉取结果。
         {% else %}
-          暂无候选列表——点上面的「测试连通性并刷新模型列表」，成功后这里就能下拉选择。
+          暂无候选列表——点上面的「测试连通性并刷新模型列表」，成功后这里就能选。
         {% endif %}
       </div>
     </div>
@@ -103,4 +110,28 @@
     函数调用的官方 API，或让服务端开启对应的解析器。
   </div>
 </div>
+
+<style>
+  /* 候选模型：可点的小胶囊（datalist 在手机上点不开，所以直接摆出来） */
+  .mchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+  .mchip{background:var(--chip-bg,#f3f1f2);border:1px solid var(--line,#e5e0e3);
+    color:var(--ink-2,#4a4348);border-radius:999px;padding:3px 10px;font:inherit;
+    font-size:.76rem;cursor:pointer;line-height:1.4}
+  .mchip:hover{border-color:var(--accent)}
+  .mchip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+</style>
+<script>
+  (function () {
+    var box = document.getElementById('mchips'), input = document.getElementById('md');
+    if (!box || !input) return;
+    box.addEventListener('click', function (e) {
+      var b = e.target.closest ? e.target.closest('.mchip') : null;
+      if (!b) return;
+      input.value = b.dataset.model || '';
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  })();
+</script>
+
+
 {% endblock %}
